@@ -27,9 +27,9 @@ class ToolResponse(BaseModel):
     """
 
     success: bool = Field(..., description="Whether the tool call succeeded.")
-    data: Dict[str, Any] = Field(
+    data: Any = Field(
         default_factory=dict,
-        description="Structured payload returned by the tool on success.",
+        description="Structured payload returned by the tool on success (dict or list).",
     )
     error: Optional[str] = Field(
         default=None,

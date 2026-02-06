@@ -1,229 +1,147 @@
-"""Tools for the Shipping (WISMO) specialist.
+"""WISMO-specific composite tools.
 
-These are **Python adapters** around the hackathon tooling API. During
-local development they can fall back to deterministic mocks, but in the
-evaluation environment they should call the real HTTP endpoints.
+These wrap the shared Shopify tool adapters with WISMO-specific logic:
+- ``get_order_status`` — two-step lookup (customer orders → order details)
+- ``get_order_by_id``  — direct order lookup by #id
+- ``extract_order_id`` — regex extraction from free text
 
-All functions must return ``ToolResponse`` to match the uniform contract.
-
-Mock behaviour
---------------
-When ``API_URL`` is not set, responses are controlled by the
-``shopify_customer_id`` passed in:
-
-    cust-unfulfilled  →  UNFULFILLED (no tracking)
-    cust-delivered    →  DELIVERED
-    cust-no-orders    →  empty order list  (triggers "ask for order ID")
-    anything else     →  IN_TRANSIT with tracking URL
+Mock behaviour (when API_URL is not set) is controlled by email:
+    unfulfilled@test.com  →  UNFULFILLED
+    delivered@test.com    →  DELIVERED
+    noorders@test.com     →  no orders (triggers ask-for-order-ID)
+    anything else         →  IN_TRANSIT with tracking URL
 """
 
 from __future__ import annotations
 
-import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-import httpx
-
 from schemas.internal import ToolResponse
+from tools.api import API_URL, post_tool
 
 
-API_URL = os.environ.get("API_URL", "").rstrip("/")
-
-
-# ── Low-level HTTP helper ──────────────────────────────────────────
-
-
-async def _post_tool(path: str, payload: Dict[str, Any]) -> ToolResponse:
-    """Call a hackathon tool endpoint and normalise the response."""
-
-    if not API_URL:
-        return ToolResponse(success=False, error="API_URL is not configured.")
-
-    url = "%s/%s" % (API_URL, path.lstrip("/"))
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, json=payload)
-    except Exception as exc:
-        return ToolResponse(success=False, error="HTTP error calling %s: %s" % (url, exc))
-
-    if resp.status_code != 200:
-        return ToolResponse(
-            success=False,
-            error="Non-200 status from %s: %s" % (url, resp.status_code),
-        )
-
-    try:
-        body = resp.json()
-    except Exception as exc:
-        return ToolResponse(success=False, error="Invalid JSON from %s: %s" % (url, exc))
-
-    if not isinstance(body, dict):
-        return ToolResponse(success=False, error="Unexpected response shape from %s" % url)
-
-    success = bool(body.get("success"))
-    data = body.get("data") or {}
-    error = body.get("error")
-
-    if not success and not error:
-        error = "Tool call failed without error message."
-    if not isinstance(data, dict):
-        data = {}
-
-    return ToolResponse(success=success, data=data, error=error)
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 # ── Mock scenarios (local dev / no API_URL) ────────────────────────
 
-_MOCK_SCENARIOS: Dict[str, Optional[Dict[str, Any]]] = {
-    "cust-unfulfilled": {
+_MOCK_BY_EMAIL: Dict[str, Optional[Dict[str, Any]]] = {
+    "unfulfilled@test.com": {
         "order_id": "#2001",
         "status": "UNFULFILLED",
-        "created_at": datetime.utcnow().isoformat(),
         "tracking_url": None,
-        "raw": {},
     },
-    "cust-delivered": {
+    "delivered@test.com": {
         "order_id": "#3001",
         "status": "DELIVERED",
-        "created_at": datetime.utcnow().isoformat(),
         "tracking_url": "https://tracking.example.com/delivered456",
-        "raw": {},
     },
-    "cust-no-orders": None,  # signals: no orders found
+    "noorders@test.com": None,  # signals no orders
 }
 
 _DEFAULT_MOCK: Dict[str, Any] = {
     "order_id": "#1001",
     "status": "IN_TRANSIT",
-    "created_at": datetime.utcnow().isoformat(),
     "tracking_url": "https://tracking.example.com/demo123",
-    "raw": {},
 }
 
 
 # ── Public tools ───────────────────────────────────────────────────
 
 
-async def get_order_status(*, shopify_customer_id: str) -> ToolResponse:
-    """Fetch the latest order status for a Shopify customer.
+async def get_order_status(*, email: str) -> ToolResponse:
+    """Fetch the latest order status for a customer by email.
 
-    Two-step call mirroring the tooling spec:
-      1) ``shopify_get_customer_orders``  →  list of orders
-      2) ``shopify_get_order_details``    →  details for the most recent
+    Two-step call:
+      1) ``shopify_get_customer_orders`` → list of orders
+      2) ``shopify_get_order_details``   → details for the most recent
 
     Returns ``data.no_orders = True`` when the customer has no orders.
     """
 
     # ---- Real API path ------------------------------------------------
     if API_URL:
-        orders_resp = await _post_tool(
-            "shopify_get_customer_orders",
-            {"shopifyCustomerId": shopify_customer_id},
+        orders_resp = await post_tool(
+            "hackhaton/get_customer_orders",
+            {"email": email, "after": "null", "limit": 10},
         )
         if orders_resp.success:
-            orders = orders_resp.data.get("orders") or []
+            data = orders_resp.data
+            orders = data.get("orders") if isinstance(data, dict) else []
             if not orders:
                 return ToolResponse(success=True, data={"no_orders": True})
 
             latest = orders[0]
-            order_id = latest.get("id") or latest.get("order_id")
-            if order_id:
-                details_resp = await _post_tool(
-                    "shopify_get_order_details",
-                    {"orderId": order_id},
-                )
-                if details_resp.success:
-                    data = details_resp.data
-                    normalised: Dict[str, Any] = {
-                        "order_id": data.get("order_id") or "#%s" % order_id,
-                        "status": (data.get("status") or "").upper(),
-                        "created_at": data.get("created_at")
-                        or datetime.utcnow().isoformat(),
-                        "tracking_url": data.get("tracking_url"),
-                        "raw": data,
-                    }
-                    return ToolResponse(success=True, data=normalised)
+            order_name = latest.get("name") or latest.get("id", "")
+            # Ensure starts with #
+            if not order_name.startswith("#"):
+                order_name = "#%s" % order_name
+
+            details_resp = await post_tool(
+                "hackhaton/get_order_details",
+                {"orderId": order_name},
+            )
+            if details_resp.success:
+                d = details_resp.data if isinstance(details_resp.data, dict) else {}
+                return ToolResponse(success=True, data={
+                    "order_id": d.get("name") or order_name,
+                    "order_gid": d.get("id", ""),
+                    "status": (d.get("status") or "").upper(),
+                    "created_at": d.get("createdAt") or _now_iso(),
+                    "tracking_url": d.get("trackingUrl"),
+                })
 
         if not orders_resp.success:
             return orders_resp
-
-        # API returned success but empty — signal no orders
         return ToolResponse(success=True, data={"no_orders": True})
 
     # ---- Mock path (local dev) ----------------------------------------
-    scenario = _MOCK_SCENARIOS.get(shopify_customer_id)
-    if scenario is None and shopify_customer_id in _MOCK_SCENARIOS:
-        # Explicit None → no orders
+    scenario = _MOCK_BY_EMAIL.get(email)
+    if scenario is None and email in _MOCK_BY_EMAIL:
         return ToolResponse(success=True, data={"no_orders": True})
 
-    mock_data = dict(scenario or _DEFAULT_MOCK)
-    mock_data["created_at"] = datetime.utcnow().isoformat()
-    return ToolResponse(success=True, data=mock_data)
+    mock = dict(scenario or _DEFAULT_MOCK)
+    mock["created_at"] = _now_iso()
+    return ToolResponse(success=True, data=mock)
 
 
 async def get_order_by_id(*, order_id: str) -> ToolResponse:
-    """Look up a specific order by its order ID.
+    """Look up a specific order by its order ID (e.g. #43189)."""
 
-    Used when the customer provides an order number after the initial
-    lookup found nothing under their Shopify customer ID.
-    """
-
-    clean_id = order_id.lstrip("#").strip()
+    # Ensure starts with #
+    if not order_id.startswith("#"):
+        order_id = "#%s" % order_id.lstrip("#").strip()
 
     if API_URL:
-        resp = await _post_tool(
-            "shopify_get_order_details",
-            {"orderId": clean_id},
+        resp = await post_tool(
+            "hackhaton/get_order_details",
+            {"orderId": order_id},
         )
         if resp.success:
-            data = resp.data
-            return ToolResponse(
-                success=True,
-                data={
-                    "order_id": data.get("order_id") or "#%s" % clean_id,
-                    "status": (data.get("status") or "").upper(),
-                    "created_at": data.get("created_at")
-                    or datetime.utcnow().isoformat(),
-                    "tracking_url": data.get("tracking_url"),
-                    "raw": data,
-                },
-            )
+            d = resp.data if isinstance(resp.data, dict) else {}
+            return ToolResponse(success=True, data={
+                "order_id": d.get("name") or order_id,
+                "order_gid": d.get("id", ""),
+                "status": (d.get("status") or "").upper(),
+                "created_at": d.get("createdAt") or _now_iso(),
+                "tracking_url": d.get("trackingUrl"),
+            })
         return resp
 
-    # Mock: return IN_TRANSIT for any order ID in local dev
-    return ToolResponse(
-        success=True,
-        data={
-            "order_id": "#%s" % clean_id,
-            "status": "IN_TRANSIT",
-            "created_at": datetime.utcnow().isoformat(),
-            "tracking_url": "https://tracking.example.com/%s" % clean_id,
-            "raw": {},
-        },
-    )
-
-
-async def get_tracking_link(*, order_id: str) -> ToolResponse:
-    """Return a tracking link for the given order id."""
-
-    return ToolResponse(
-        success=True,
-        data={
-            "order_id": order_id,
-            "tracking_url": "https://tracking.example.com/%s" % order_id.lstrip("#"),
-        },
-    )
+    # Mock: return IN_TRANSIT for any order ID
+    return ToolResponse(success=True, data={
+        "order_id": order_id,
+        "status": "IN_TRANSIT",
+        "created_at": _now_iso(),
+        "tracking_url": "https://tracking.example.com/%s" % order_id.lstrip("#"),
+    })
 
 
 def extract_order_id(text: str) -> Optional[str]:
-    """Try to pull an order number from free-text customer input.
-
-    Looks for patterns like ``#12345``, ``NP1234567``,
-    ``order 12345``, or a bare number.
-    """
+    """Extract an order number from free-text customer input."""
 
     patterns = [
         r"#(\d+)",
@@ -233,10 +151,8 @@ def extract_order_id(text: str) -> Optional[str]:
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            digits = match.group(1)
-            return "#%s" % digits
+            return "#%s" % match.group(1)
 
-    # Bare number as the whole message
     stripped = text.strip()
     if stripped.isdigit() and len(stripped) >= 3:
         return "#%s" % stripped
@@ -244,9 +160,4 @@ def extract_order_id(text: str) -> Optional[str]:
     return None
 
 
-__all__ = [
-    "get_order_status",
-    "get_order_by_id",
-    "get_tracking_link",
-    "extract_order_id",
-]
+__all__ = ["get_order_status", "get_order_by_id", "extract_order_id"]

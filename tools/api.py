@@ -38,11 +38,14 @@ async def post_tool(path: str, payload: Dict[str, Any]) -> ToolResponse:
         return ToolResponse(success=False, error="Unexpected response shape")
 
     success = bool(body.get("success"))
-    data = body.get("data") or {}
+    data = body.get("data")
     error = body.get("error")
     if not success and not error:
         error = "Tool call failed without error message."
-    if not isinstance(data, dict):
+    # Normalise: keep dict/list as-is, wrap scalars
+    if data is None:
         data = {}
+    elif not isinstance(data, (dict, list)):
+        data = {"value": data}
 
     return ToolResponse(success=success, data=data, error=error)

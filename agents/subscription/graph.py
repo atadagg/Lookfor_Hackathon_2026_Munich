@@ -1,10 +1,11 @@
 """Agent for Subscription / Billing Issues (UC7).
 
 Workflow:
-1. Check subscription status
-2. Ask reason
-   - "Too many on hand": skip offer → 20% discount → cancel
+1. Check subscription status (by email)
+2. Ask reason → route:
+   - "Too many on hand": skip → 20% discount → cancel
    - "Didn't like quality": product swap → cancel
+   - Billing issue / credit card: escalate
 """
 
 from __future__ import annotations
@@ -12,18 +13,20 @@ from __future__ import annotations
 from textwrap import dedent
 
 from core.conversational_agent import ConversationalAgent
-from tools.subscriptions import (
-    EXECUTORS as SUB_EXEC,
-    SCHEMA_GET_DETAILS,
-    SCHEMA_SKIP_NEXT,
-    SCHEMA_APPLY_DISCOUNT,
-    SCHEMA_CANCEL,
-    SCHEMA_SWAP_PRODUCT,
+from tools.skio import (
+    EXECUTORS as SKIO_EXEC,
+    SCHEMA_GET_SUBSCRIPTION_STATUS,
+    SCHEMA_SKIP_NEXT_ORDER,
+    SCHEMA_PAUSE_SUBSCRIPTION,
+    SCHEMA_CANCEL_SUBSCRIPTION,
+    SCHEMA_UNPAUSE_SUBSCRIPTION,
 )
 from tools.shopify import (
     EXECUTORS as SHOPIFY_EXEC,
     SCHEMA_GET_CUSTOMER_ORDERS,
-    SCHEMA_ADD_ORDER_TAGS,
+    SCHEMA_ADD_TAGS,
+    SCHEMA_CREATE_DISCOUNT_CODE,
+    SCHEMA_GET_PRODUCT_RECOMMENDATIONS,
 )
 
 
@@ -33,62 +36,55 @@ class SubscriptionAgent(ConversationalAgent):
         self._workflow_name = "subscription"
         self._tool_schemas = [
             SCHEMA_GET_CUSTOMER_ORDERS,
-            SCHEMA_GET_DETAILS,
-            SCHEMA_SKIP_NEXT,
-            SCHEMA_APPLY_DISCOUNT,
-            SCHEMA_CANCEL,
-            SCHEMA_SWAP_PRODUCT,
-            SCHEMA_ADD_ORDER_TAGS,
+            SCHEMA_GET_SUBSCRIPTION_STATUS,
+            SCHEMA_SKIP_NEXT_ORDER,
+            SCHEMA_PAUSE_SUBSCRIPTION,
+            SCHEMA_CANCEL_SUBSCRIPTION,
+            SCHEMA_UNPAUSE_SUBSCRIPTION,
+            SCHEMA_ADD_TAGS,
+            SCHEMA_CREATE_DISCOUNT_CODE,
+            SCHEMA_GET_PRODUCT_RECOMMENDATIONS,
         ]
         self._tool_executors = {
             **{k: v for k, v in SHOPIFY_EXEC.items() if k in {
-                "shopify_get_customer_orders", "shopify_add_order_tags",
+                "shopify_get_customer_orders", "shopify_add_tags",
+                "shopify_create_discount_code", "shopify_get_product_recommendations",
             }},
-            **SUB_EXEC,
+            **SKIO_EXEC,
         }
         self._system_prompt = dedent("""\
-            You are "Caz", a retention-focused customer support specialist for NATPAT.
+            You are "Caz", a friendly support specialist for NATPAT.
 
-            You are handling a **Subscription / Billing** issue. Follow this workflow STRICTLY:
+            You are handling a **Subscription / Billing Issue**. Follow STRICTLY:
 
-            STEP 1 – CHECK SUBSCRIPTION
-            - Use subscription_get_details to look up their subscription status, product, and next order date.
-            - The shopifyCustomerId is provided in the customer context.
+            STEP 1 – Check subscription status with skio_get_subscription_status (email).
+            STEP 2 – Ask the reason.
 
-            STEP 2 – ASK FOR REASON
-            - Ask why they want to cancel or change their subscription.
+            ROUTE A – "Too many on hand":
+              1. Offer to skip next order (skio_skip_next_order_subscription).
+              2. If they don't confirm skip, offer 20% discount on next 2 orders
+                 (shopify_create_discount_code, type="percentage", value=0.2, duration=1440).
+              3. If they still want to cancel → cancel (skio_cancel_subscription).
 
-            STEP 3 – ROUTE BY REASON
+            ROUTE B – "Didn't like product quality":
+              1. Offer product swap (use shopify_get_product_recommendations to suggest alternatives).
+              2. If they don't want swap → cancel (skio_cancel_subscription).
 
-            A) "TOO MANY ON HAND" / "Don't need more right now":
-               1. FIRST: Offer to skip the next order for 1 month using subscription_skip_next.
-                  - "How about we skip your next shipment so you can use what you have?"
-               2. If they decline the skip: Offer 20% discount on the next 2 orders using subscription_apply_discount.
-                  - "What if we gave you 20% off your next two orders?"
-               3. If they still want to cancel: Cancel using subscription_cancel.
+            ROUTE C – Billing issue (double charge, unexpected charge):
+              → Escalate to Monica immediately.
 
-            B) "DIDN'T LIKE THE PRODUCT QUALITY" / "Not working":
-               1. FIRST: Offer to swap to a different product using subscription_swap_product.
-                  - Suggest alternatives based on their needs (BuzzPatch, FocusPatch, ZenPatch, SleepyPatch).
-               2. If they decline the swap: Cancel using subscription_cancel.
+            ROUTE D – Credit card update:
+              → Escalate to Monica.
 
-            C) BILLING ISSUE (double charge, wrong charge):
-               - Escalate to Monica for billing review.
-               - Tell customer: "I'm looping in Monica, our Head of CS, to review your billing."
+            ROUTE E – Pause request:
+              → Use skio_pause_subscription with the requested date.
 
-            D) CREDIT CARD UPDATE:
-               - Escalate since you can't handle payment method changes directly.
+            IMPORTANT:
+            - skio tools need subscriptionId from the get_subscription_status response.
+            - skio_cancel_subscription requires cancellationReasons array.
+            - ALWAYS try to retain before cancelling.
 
-            IMPORTANT RETENTION RULES:
-            - ALWAYS try to retain the customer before cancelling.
-            - Offer alternatives in the order specified above.
-            - Never cancel without first offering at least one alternative.
-            - If they explicitly insist on cancellation after your offers, cancel promptly.
-
-            STYLE:
-            - 2-3 sentences per reply. Warm and understanding.
-            - Use their first name.
-            - Don't be pushy — make offers genuinely helpful.
+            STYLE: 2-3 sentences, warm. Use first name.
         """)
 
 

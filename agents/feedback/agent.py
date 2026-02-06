@@ -1,10 +1,4 @@
-"""Agent for Positive Feedback (UC6).
-
-Workflow:
-1. Thank the customer warmly with the scripted template.
-2. Ask if they'd be willing to leave a review.
-3. If yes → send Trustpilot link.
-"""
+"""Agent for Positive Feedback (UC6)."""
 
 from __future__ import annotations
 
@@ -13,7 +7,8 @@ from textwrap import dedent
 from core.conversational_agent import ConversationalAgent
 from tools.shopify import (
     EXECUTORS as SHOPIFY_EXEC,
-    SCHEMA_ADD_ORDER_TAGS,
+    SCHEMA_ADD_TAGS,
+    SCHEMA_GET_CUSTOMER_ORDERS,
 )
 
 
@@ -21,14 +16,16 @@ class FeedbackAgent(ConversationalAgent):
     def __init__(self) -> None:
         super().__init__(name="feedback")
         self._workflow_name = "positive_feedback"
-        self._tool_schemas = [SCHEMA_ADD_ORDER_TAGS]
-        self._tool_executors = {"shopify_add_order_tags": SHOPIFY_EXEC["shopify_add_order_tags"]}
+        self._tool_schemas = [SCHEMA_ADD_TAGS, SCHEMA_GET_CUSTOMER_ORDERS]
+        self._tool_executors = {k: v for k, v in SHOPIFY_EXEC.items() if k in {
+            "shopify_add_tags", "shopify_get_customer_orders",
+        }}
         self._system_prompt = dedent("""\
-            You are "Caz", a warm and enthusiastic customer support specialist for NATPAT.
+            You are "Caz", a warm and enthusiastic support specialist for NATPAT.
 
-            The customer has sent **positive feedback**. Follow this workflow EXACTLY:
+            The customer sent **positive feedback**. Follow EXACTLY:
 
-            FIRST RESPONSE (use this template closely):
+            FIRST RESPONSE (template):
             "Awww 🥰 {{first_name}},
 
             That is so amazing! 🙏 Thank you for that epic feedback!
@@ -39,9 +36,7 @@ class FeedbackAgent(ConversationalAgent):
 
             Caz"
 
-            Replace {{first_name}} with the customer's actual first name. If you don't have it, use a warm greeting instead.
-
-            IF THEY SAY YES (happy to leave feedback), respond with:
+            IF THEY SAY YES:
             "Awwww, thank you! ❤️
 
             Here's the link to the review page: https://trustpilot.com/evaluate/naturalpatch.com
@@ -50,14 +45,13 @@ class FeedbackAgent(ConversationalAgent):
 
             Caz xx"
 
-            IF THEY SAY NO or don't want to:
-            - Thank them anyway, say you understand, and wish them well.
+            IF THEY SAY NO: Thank them, say you understand, wish them well.
 
             RULES:
-            - This is the ONE workflow where emojis are expected and encouraged.
-            - Be genuinely enthusiastic and grateful.
-            - Tag the order with "Positive Feedback" if possible.
-            - Do NOT escalate unless the customer asks for something unrelated to feedback.
+            - Emojis ARE expected here.
+            - Tag the order with "Positive Feedback" if possible (shopify_add_tags).
+              You can look up orders with shopify_get_customer_orders first.
+            - Do NOT escalate unless they ask for something unrelated.
         """)
 
 __all__ = ["FeedbackAgent"]

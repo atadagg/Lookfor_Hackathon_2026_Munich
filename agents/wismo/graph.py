@@ -65,7 +65,7 @@ async def node_check_order_status(state: AgentState) -> dict:
     """Fetch the latest order status via the tool and store it.
 
     Handles three paths:
-    * Normal first call — look up by ``shopify_customer_id``.
+    * Normal first call — look up by customer email.
     * Resuming after ``awaiting_order_id`` — extract order # from the
       latest user message and call ``get_order_by_id``.
     * No orders found — ask the customer for their order number.
@@ -73,7 +73,7 @@ async def node_check_order_status(state: AgentState) -> dict:
 
     internal = _fresh_internal(state)
     customer = state.get("customer_info") or {}
-    shopify_customer_id = customer.get("shopify_customer_id")
+    customer_email = customer.get("email")
     prev_step = state.get("workflow_step") or ""
 
     # ── Path A: resuming after we asked for an order ID ────────────
@@ -159,10 +159,10 @@ async def node_check_order_status(state: AgentState) -> dict:
             "workflow_step": "checked_status",
         }
 
-    # ── Path B: no customer id → escalate ──────────────────────────
-    if not shopify_customer_id:
+    # ── Path B: no email → escalate ───────────────────────────────
+    if not customer_email:
         internal["escalation_summary"] = EscalationSummary(
-            reason="missing_shopify_id",
+            reason="missing_customer_email",
             details={"customer_info": customer},
         ).model_dump()
         new_msg = Message(
@@ -178,16 +178,16 @@ async def node_check_order_status(state: AgentState) -> dict:
             "escalated_at": datetime.utcnow(),
             "internal_data": internal,
             "messages": list(state.get("messages", [])) + [new_msg],
-            "workflow_step": "escalated_missing_id",
+            "workflow_step": "escalated_missing_email",
         }
 
-    # ── Path C: normal lookup by shopify_customer_id ───────────────
-    tool_resp = await get_order_status(shopify_customer_id=shopify_customer_id)
+    # ── Path C: normal lookup by customer email ────────────────────
+    tool_resp = await get_order_status(email=customer_email)
 
     internal["tool_traces"].append(
         {
             "name": "get_order_status",
-            "inputs": {"shopify_customer_id": shopify_customer_id},
+            "inputs": {"email": customer_email},
             "output": tool_resp.model_dump(),
         }
     )

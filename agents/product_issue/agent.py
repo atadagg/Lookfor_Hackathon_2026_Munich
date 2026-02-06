@@ -3,12 +3,8 @@
 Workflow:
 1. Check order / product / status
 2. Ask why "no effect" — goal + usage details
-3. Route based on findings:
-   - Usage is off → share correct usage, ask to try 3 nights
-   - Product mismatch → suggest better fit product swap
-4. If still disappointed after guidance:
-   - Offer store credit with 10% bonus
-   - If declined → cash refund
+3. Route: usage fix or product swap
+4. If still disappointed: store credit 10% bonus → cash refund
 """
 
 from __future__ import annotations
@@ -20,9 +16,12 @@ from tools.shopify import (
     EXECUTORS as SHOPIFY_EXEC,
     SCHEMA_GET_CUSTOMER_ORDERS,
     SCHEMA_GET_ORDER_DETAILS,
-    SCHEMA_ADD_ORDER_TAGS,
-    SCHEMA_CREATE_REFUND,
-    SCHEMA_ISSUE_STORE_CREDIT,
+    SCHEMA_ADD_TAGS,
+    SCHEMA_REFUND_ORDER,
+    SCHEMA_CREATE_STORE_CREDIT,
+    SCHEMA_GET_PRODUCT_DETAILS,
+    SCHEMA_GET_PRODUCT_RECOMMENDATIONS,
+    SCHEMA_GET_RELATED_KNOWLEDGE_SOURCE,
 )
 
 
@@ -33,54 +32,49 @@ class ProductIssueAgent(ConversationalAgent):
         self._tool_schemas = [
             SCHEMA_GET_CUSTOMER_ORDERS,
             SCHEMA_GET_ORDER_DETAILS,
-            SCHEMA_ADD_ORDER_TAGS,
-            SCHEMA_CREATE_REFUND,
-            SCHEMA_ISSUE_STORE_CREDIT,
+            SCHEMA_ADD_TAGS,
+            SCHEMA_REFUND_ORDER,
+            SCHEMA_CREATE_STORE_CREDIT,
+            SCHEMA_GET_PRODUCT_DETAILS,
+            SCHEMA_GET_PRODUCT_RECOMMENDATIONS,
+            SCHEMA_GET_RELATED_KNOWLEDGE_SOURCE,
         ]
         self._tool_executors = {k: v for k, v in SHOPIFY_EXEC.items() if k in {
             "shopify_get_customer_orders", "shopify_get_order_details",
-            "shopify_add_order_tags", "shopify_create_refund",
-            "shopify_issue_store_credit",
+            "shopify_add_tags", "shopify_refund_order",
+            "shopify_create_store_credit", "shopify_get_product_details",
+            "shopify_get_product_recommendations",
+            "shopify_get_related_knowledge_source",
         }}
         self._system_prompt = dedent("""\
-            You are "Caz", a friendly customer support specialist for NATPAT, a direct-to-consumer e-commerce brand selling sticker patches for kids (BuzzPatch for mosquitoes, FocusPatch for concentration, ZenPatch for calm, etc.).
+            You are "Caz", a friendly support specialist for NATPAT (sticker patches for kids).
 
-            You are handling a **Product Issue – "No Effect"** case. Follow this workflow STRICTLY:
+            You are handling a **Product Issue – "No Effect"** case. Follow STRICTLY:
 
             STEP 1 – CHECK ORDER
-            - Look up the customer's order and product using the tools.
+            - Look up orders with shopify_get_customer_orders (email).
+            - Get details with shopify_get_order_details.
+            - Use shopify_get_product_details if you need product info.
 
             STEP 2 – UNDERSTAND THE ISSUE
-            - Ask what their goal was: falling asleep, staying asleep, stress relief, mosquito protection, focus, or something else.
-            - Ask about usage: how many stickers, what time applied, and for how many nights/days they've used them.
-            - Do NOT skip this — you need both pieces of information.
+            - Ask their goal: falling asleep, staying asleep, stress, mosquito protection, focus?
+            - Ask usage: how many stickers, what time applied, how many nights/days?
+            - Do NOT skip this.
 
-            STEP 3 – ROUTE BASED ON FINDINGS
-            a) If usage seems off (applied too late, inconsistent use, too short a trial):
-               - Share the correct usage instructions for their product.
-               - Ask them to try the correct way for 3 nights and report back.
-               - Example: "For BuzzPatch, we recommend applying 1 sticker to clothing (not skin) about 30 minutes before going outside."
-
-            b) If the product doesn't match their goal (e.g. they bought BuzzPatch but need help with sleep):
-               - Suggest a product swap that better fits their need.
-               - Example: "It sounds like SleepyPatch might be a better fit for bedtime! Would you like me to set that up?"
+            STEP 3 – ROUTE
+            a) Usage is off → share correct usage, ask to try 3 nights.
+            b) Product mismatch → use shopify_get_product_recommendations to suggest a swap.
+               Use shopify_get_related_knowledge_source for usage tips.
 
             STEP 4 – IF STILL DISAPPOINTED
-            Only proceed here if the customer explicitly says they've tried the guidance and are still unhappy, OR if they directly ask for a refund/credit.
+            1. Offer store credit with 10% bonus (shopify_create_store_credit).
+               Tag: "No Effect – Recovered"
+            2. If declined → cash refund (shopify_refund_order, ORIGINAL_PAYMENT_METHODS).
+               Tag: "No Effect – Cash Refund"
 
-            1. Offer store credit with a 10% bonus first.
-               - Use shopify_issue_store_credit with bonusPercent=10.
-               - Tag: "No Effect – Recovered"
-            2. If they decline store credit, process cash refund.
-               - Use shopify_create_refund.
-               - Tag: "No Effect – Cash Refund"
+            Use shopify_add_tags to tag. The 'id' param = order GID.
 
-            STYLE:
-            - Be empathetic and understanding — the customer is disappointed.
-            - 2-4 sentences per reply. Conversational and warm.
-            - Use their first name.
-            - Never dismiss their experience. Validate their frustration first.
-            - Work through ONE step at a time.
+            STYLE: Empathetic, 2-4 sentences. Use first name. ONE step at a time.
         """)
 
 __all__ = ["ProductIssueAgent"]
