@@ -71,13 +71,23 @@ async def chat(req: ChatRequest) -> ChatResponse:
        state + assistant reply.
     """
 
-    # 1) Log inbound user message.
-    checkpointer.save_message(
+    # 1) Log inbound user message (with duplicate detection).
+    was_new = checkpointer.save_message(
         req.conversation_id,
         role="user",
         content=req.message,
         direction="inbound",
     )
+
+    if not was_new:
+        # Exact same message already recorded -- warn and don't re-process.
+        return ChatResponse(
+            conversation_id=req.conversation_id,
+            agent="duplicate",
+            state={
+                "warning": "Duplicate message detected -- identical to the last inbound message. Skipped.",
+            },
+        )
 
     # 2) Load previous state (if any) and extend the message history.
     prev_state = checkpointer.load_state(req.conversation_id) or {}
@@ -110,9 +120,12 @@ async def chat(req: ChatRequest) -> ChatResponse:
         "shopify_customer_id": req.shopify_customer_id,
     }
 
-    # Initialize / merge the shared state object.
-    state = AgentState(
-        **prev_state,
+    # Build the state from scratch, carrying over only the fields from
+    # prev_state that we don't explicitly set (e.g. internal_data,
+    # workflow_step, is_escalated, etc.).  This avoids "got multiple
+    # values for keyword argument" errors on repeated calls.
+    state: dict = dict(prev_state)  # shallow copy
+    state.update(
         conversation_id=req.conversation_id,
         user_id=req.user_id,
         channel=req.channel,
@@ -125,13 +138,15 @@ async def chat(req: ChatRequest) -> ChatResponse:
 
     # 2. Dispatch to the specialist agent
     agents = get_agent_registry()
-    agent = agents.get(state.routed_agent or "")
+    routed_agent = state.get("routed_agent") or ""
+    agent = agents.get(routed_agent)
     if agent is None:
         # Fallback: echo state without modification
         checkpointer.save_state(req.conversation_id, state)
+        conv_id = state.get("conversation_id", req.conversation_id)
         return ChatResponse(
-            conversation_id=state.conversation_id,
-            agent=state.routed_agent or "unknown",
+            conversation_id=conv_id,
+            agent=routed_agent or "unknown",
             state={
                 "error": "No agent registered",
                 "intent": state.get("intent"),
@@ -145,13 +160,26 @@ async def chat(req: ChatRequest) -> ChatResponse:
     checkpointer.save_state(req.conversation_id, state)
 
     # Log the latest assistant message (if any) for this turn.
-    assistant_messages = [m for m in state.get("messages", []) if m.get("role") == "assistant"]
-    if assistant_messages:
-        last_assistant = assistant_messages[-1]
+    raw_messages = state.get("messages", []) or []
+    assistant_text: Optional[str] = None
+
+    for msg in reversed(raw_messages):
+        # Messages may be plain dicts or LangChain-style objects.
+        if isinstance(msg, dict):
+            if msg.get("role") == "assistant":
+                assistant_text = msg.get("content", "")
+                break
+        else:
+            role = getattr(msg, "role", None) or getattr(msg, "type", None)
+            if role == "assistant":
+                assistant_text = getattr(msg, "content", None) or getattr(msg, "text", None)
+                break
+
+    if assistant_text:
         checkpointer.save_message(
             req.conversation_id,
             role="assistant",
-            content=last_assistant.get("content", ""),
+            content=assistant_text,
             direction="outbound",
         )
 
@@ -160,10 +188,12 @@ async def chat(req: ChatRequest) -> ChatResponse:
     tool_traces = internal.get("tool_traces") or []
     escalation_summary = internal.get("escalation_summary")
 
-    last_assistant_message = last_assistant.get("content", "") if assistant_messages else None
+    last_assistant_message = assistant_text
+
+    conv_id = state.get("conversation_id", req.conversation_id)
 
     return ChatResponse(
-        conversation_id=state.conversation_id,
+        conversation_id=conv_id,
         agent=agent.name,
         state={
             "intent": state.get("intent"),

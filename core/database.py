@@ -226,11 +226,15 @@ class Checkpointer:
         content: str,
         direction: str,
         external_msg_id: Optional[str] = None,
-    ) -> None:
+    ) -> bool:
         """Append a message row and bump `last_message_at` on the thread.
 
         If the thread doesn't exist yet, a minimal one is created with
         an empty state dict.
+
+        Returns ``True`` if the message was inserted, or ``False`` if an
+        identical message (same thread, role, content, direction) already
+        exists as the most recent entry -- i.e. it is a duplicate.
         """
 
         now = _utc_now_iso()
@@ -262,6 +266,24 @@ class Checkpointer:
             thread_id = cur.lastrowid
         else:
             thread_id = int(row["id"])
+
+            # --- Duplicate check: compare against the last message for
+            #     this thread with the same role and direction. -----------
+            cur.execute(
+                """
+                SELECT content
+                FROM messages
+                WHERE thread_id = ? AND role = ? AND direction = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (thread_id, role, direction),
+            )
+            last_row = cur.fetchone()
+            if last_row is not None and last_row["content"] == content:
+                # Exact duplicate of the most recent message -- skip.
+                return False
+
             cur.execute(
                 """
                 UPDATE threads
@@ -288,6 +310,7 @@ class Checkpointer:
         )
 
         self._conn.commit()
+        return True
 
     def get_thread(self, conversation_id: str) -> Optional[ThreadRecord]:
         """Lightweight helper to inspect the latest status of a thread."""
