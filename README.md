@@ -1,63 +1,96 @@
-# Lookfor Hackathon Support Agent
+# Lookfor Hackathon 2026 - Team Fidelio
 
-This is a scaffold for a digital customer support agent composed of:
+AI-powered multi-agent customer support system for e-commerce brands.
 
-- **core**: shared state, base agent interface, and persistence stub
-- **router**: LLM-based receptionist that triages conversations
-- **agents**: specialist graphs (WISMO, subscription, defect, +6 more)
-- **api**: FastAPI server exposing a `/chat` endpoint
-
-## Quickstart
+## Quick Start
 
 ```bash
-cd lookfor-hackathon
+# 1. Clone the repo
+git clone <repo-url> && cd Lookfor_Hackathon_2026_Fidelio
+
+# 2. Add your API keys to backend/.env
+cp backend/.env.example backend/.env
+# Edit backend/.env and set OPENAI_API_KEY and API_URL
+
+# 3. Run everything
+docker compose up --build
+```
+
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+
+## Architecture
+
+```
+├── backend/           # Python (FastAPI + LangGraph)
+│   ├── api/           # FastAPI server, /chat and /thread endpoints
+│   ├── agents/        # 8 specialist agents (WISMO, refund, etc.)
+│   ├── core/          # State, database, LLM client, base agent classes
+│   ├── router/        # Intent classification / routing
+│   ├── schemas/       # Pydantic models
+│   ├── tools/         # 18 hackathon tools (Shopify + Skio)
+│   └── tests/         # Integration tests
+├── frontend/          # Next.js + Shadcn UI dashboard
+│   └── src/
+│       ├── app/       # App router pages
+│       ├── components/# Mail-like UI components
+│       └── lib/       # API client
+├── docker-compose.yml # One-click orchestration
+└── README.md
+```
+
+### Agent System
+
+| Agent | Handles |
+|-------|---------|
+| `wismo` | Shipping delay / Where Is My Order |
+| `wrong_item` | Wrong or missing items in parcel |
+| `product_issue` | Product "no effect" complaints |
+| `refund` | Standard refund requests |
+| `order_mod` | Order cancellation & address changes |
+| `feedback` | Positive customer feedback |
+| `subscription` | Subscription & billing issues (Skio) |
+| `discount` | Discount / promo code problems |
+
+### Routing
+
+An LLM-based intent classifier (`router/`) analyzes the customer message and routes to the appropriate specialist agent. Each agent has its own system prompt, tool set, and workflow logic.
+
+### Tools (18 total)
+
+13 Shopify tools + 5 Skio subscription tools, all conforming to the Hackathon Tooling Spec. Tools make HTTP POST calls to `{API_URL}/hackhaton/*` endpoints. When `API_URL` is not set, agents use built-in mock responses for development.
+
+### Escalation
+
+When the workflow manual requires escalation or the system cannot safely proceed:
+1. The customer is informed their issue is being escalated
+2. A structured `EscalationSummary` is generated (reason, context, recommended action)
+3. The thread is marked `is_escalated = true` and automation stops
+
+### Observability (Frontend Dashboard)
+
+The Shadcn UI dashboard provides three views per conversation:
+- **Message** tab: Full email thread (customer + AI responses)
+- **Agent Trace** tab: Timeline of agent decisions, workflow steps, and tool calls
+- **Raw Logs** tab: Complete tool I/O and JSON state snapshot
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENAI_API_KEY` | Yes | OpenAI API key |
+| `API_URL` | At eval | Hackathon tool endpoint base URL |
+
+## Development (without Docker)
+
+```bash
+# Backend
+cd backend
 pip install -r requirements.txt
-uvicorn api.server:app --reload
-# or via docker-compose
-# docker compose up --build
-```
+uvicorn api.server:app --reload --port 8000
 
-From here you can plug in LangGraph graphs, real tools (Shopify/CRM),
-and production-grade prompts.
-
-## Persistence: SQLite checkpointer
-
-Conversation state and emails are stored in a single SQLite DB (`state.db`) via `core.database.Checkpointer`.
-
-- **Threads** (`threads` table)
-  - One row per external conversation (`external_thread_id`).
-  - Tracks overall status (`status` = `open` / `escalated` / `closed`), `current_workflow`, `workflow_step`, `is_escalated`, `escalated_at`.
-  - Stores the latest full `AgentState` in `state_json`.
-
-- **Messages** (`messages` table)
-  - One row per email/chat message.
-  - Columns: `thread_id`, `role` (`user` / `assistant` / `system`), `content`, `direction` (`inbound` / `outbound`), timestamps.
-
-Basic usage pattern:
-
-```python
-from core.database import Checkpointer
-
-cp = Checkpointer()
-
-# Log incoming user email
-cp.save_message(conversation_id, role="user", content=text, direction="inbound")
-
-# Load previous AgentState (if any)
-state = cp.load_state(conversation_id) or {}
-
-# ... run router + agent graph, producing updated `state` ...
-
-# Persist updated AgentState + thread status
-cp.save_state(conversation_id, state)
-
-# Log outgoing assistant reply
-cp.save_message(conversation_id, role="assistant", content=reply, direction="outbound")
-```
-
-For LangGraph graphs, compile with the same SQLite DB:
-
-```python
-graph = build_shipping_graph()
-app = graph.compile(checkpointer=cp.langgraph_saver)
+# Frontend
+cd frontend
+npm install
+npm run dev
 ```

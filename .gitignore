@@ -11,16 +11,18 @@ venv/
 # SQLite runtime database
 state.db
 
+# Node / Frontend
+node_modules/
+.next/
+out/
+
 # IDE
 .idea/
 .vscode/
 .cursor/
-.cursor/plans/
 *.swp
 *.swo
 
 # OS
 .DS_Store
 Thumbs.db
-
-
