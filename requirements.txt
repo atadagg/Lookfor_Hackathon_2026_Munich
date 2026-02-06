@@ -4,6 +4,7 @@ pydantic
 
 # Graph / workflow engine
 langgraph
+langsmith
 
 # HTTP client for tool adapters
 httpx
