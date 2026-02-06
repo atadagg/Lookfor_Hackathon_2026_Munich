@@ -10,8 +10,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 import json
+import os
 
-from core.llm import get_async_openai_client
+from openai import AsyncOpenAI
+
 from core.state import AgentState, Message
 from schemas.internal import EscalationSummary
 from .prompt import INTENT_CLASSIFICATION_PROMPT
@@ -22,6 +24,22 @@ class RouteDecision:
     intent: str
     routed_agent: str
     confidence: float
+
+
+# Lazily created async OpenAI client; avoids import-time failures in
+# environments (like tests) where OPENAI_API_KEY is not set.
+_client: Optional[AsyncOpenAI] = None
+
+
+def _get_client() -> AsyncOpenAI:
+    global _client
+    if _client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            # Let the caller handle this as an LLM error.
+            raise RuntimeError("OPENAI_API_KEY is not set")
+        _client = AsyncOpenAI(api_key=api_key)
+    return _client
 
 
 def _escalate_due_to_llm_error(
@@ -94,7 +112,7 @@ async def classify_intent(state: AgentState) -> RouteDecision:
     )
 
     try:
-        client = get_async_openai_client()
+        client = _get_client()
         resp = await client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0.0,
@@ -105,8 +123,8 @@ async def classify_intent(state: AgentState) -> RouteDecision:
             ],
         )
     except Exception as exc:
-        # Any LLM error should escalate the thread rather than falling
-        # back silently to automation.
+        # Any LLM error (including missing API key) should escalate the
+        # thread rather than falling back silently to automation.
         return _escalate_due_to_llm_error(state, str(exc))
 
     raw = resp.choices[0].message.content or ""
@@ -142,4 +160,4 @@ async def route(state: AgentState) -> AgentState:
     return state
 
 
-__all__ = ["RouteDecision", "classify_intent", "route"]
+__all__ = ["RouteDecision", "classify_intent", "route", "_get_client"]

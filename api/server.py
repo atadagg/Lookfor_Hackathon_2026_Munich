@@ -157,9 +157,10 @@ async def chat(req: ChatRequest) -> ChatResponse:
         escalation_summary = internal.get("escalation_summary")
 
         last_assistant_message = last_assistant.get("content", "") if assistant_messages else None
+        conv_id = state.get("conversation_id", req.conversation_id)
 
         return ChatResponse(
-            conversation_id=state.get("conversation_id", req.conversation_id),
+            conversation_id=conv_id,
             agent="escalated",
             state={
                 "intent": state.get("intent"),
