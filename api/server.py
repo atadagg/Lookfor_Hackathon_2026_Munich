@@ -19,7 +19,13 @@ app = FastAPI(title="Lookfor Hackathon Support API")
 class ChatRequest(BaseModel):
     conversation_id: str
     user_id: str
-    channel: str = "web"
+    # Channel is kept generic; in the hackathon this will usually be "email".
+    channel: str = "email"
+    # Email session metadata provided at the start of the thread.
+    customer_email: str
+    first_name: str
+    last_name: str
+    shopify_customer_id: str
     message: str
 
 
@@ -27,6 +33,16 @@ class ChatResponse(BaseModel):
     conversation_id: str
     agent: str
     state: Dict[str, Any]
+
+
+class ThreadSnapshot(BaseModel):
+    conversation_id: str
+    status: str
+    current_workflow: str | None = None
+    workflow_step: str | None = None
+    is_escalated: bool
+    escalated_at: str | None = None
+    messages: list[Dict[str, Any]]
 
 
 # Single shared checkpointer instance.
@@ -60,14 +76,30 @@ async def chat(req: ChatRequest) -> ChatResponse:
     # Lightweight filter: if this thread was already escalated, do not
     # re-enter the automated pipeline. Humans own it from here.
     if prev_state.get("is_escalated"):
+        internal = (prev_state.get("internal_data") or {}) if isinstance(prev_state, dict) else {}
+        escalation_summary = internal.get("escalation_summary")
         return ChatResponse(
             conversation_id=req.conversation_id,
             agent="escalated",
-            state={"status": "escalated", "reason": "thread already escalated to human"},
+            state={
+                "status": "escalated",
+                "reason": "thread already escalated to human",
+                "escalation_summary": escalation_summary,
+            },
         )
 
     messages = list(prev_state.get("messages", []))
     messages.append(Message(role="user", content=req.message))
+
+    # Merge / override customer info from the request.
+    prev_customer = prev_state.get("customer_info", {}) if isinstance(prev_state, dict) else {}
+    customer_info = {
+        **prev_customer,
+        "email": req.customer_email,
+        "first_name": req.first_name,
+        "last_name": req.last_name,
+        "shopify_customer_id": req.shopify_customer_id,
+    }
 
     # Initialize / merge the shared state object.
     state = AgentState(
@@ -75,6 +107,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
         conversation_id=req.conversation_id,
         user_id=req.user_id,
         channel=req.channel,
+        customer_info=customer_info,
         messages=messages,
     )
 
@@ -90,7 +123,11 @@ async def chat(req: ChatRequest) -> ChatResponse:
         return ChatResponse(
             conversation_id=state.conversation_id,
             agent=state.routed_agent or "unknown",
-            state={"error": "No agent registered", "slots": state.slots},
+            state={
+                "error": "No agent registered",
+                "intent": state.get("intent"),
+                "routed_agent": state.get("routed_agent"),
+            },
         )
 
     state = await agent.handle(state)
@@ -109,8 +146,56 @@ async def chat(req: ChatRequest) -> ChatResponse:
             direction="outbound",
         )
 
+    # Prepare observable state payload for the caller.
+    internal = state.get("internal_data", {}) or {}
+    tool_traces = internal.get("tool_traces") or []
+    escalation_summary = internal.get("escalation_summary")
+
+    last_assistant_message = last_assistant.get("content", "") if assistant_messages else None
+
     return ChatResponse(
         conversation_id=state.conversation_id,
         agent=agent.name,
-        state={"intent": state.intent, "routed_agent": state.routed_agent, "slots": state.slots},
+        state={
+            "intent": state.get("intent"),
+            "routed_agent": state.get("routed_agent"),
+            "current_workflow": state.get("current_workflow"),
+            "workflow_step": state.get("workflow_step"),
+            "is_escalated": state.get("is_escalated", False),
+            "escalation_summary": escalation_summary,
+            "last_assistant_message": last_assistant_message,
+            "internal_data": {
+                "tool_traces": tool_traces,
+            },
+        },
+    )
+
+
+@app.get("/thread/{conversation_id}", response_model=ThreadSnapshot)
+async def get_thread(conversation_id: str) -> ThreadSnapshot:
+    """Read-only endpoint to inspect a thread's status and messages."""
+
+    thread = checkpointer.get_thread(conversation_id)
+    messages = checkpointer.get_messages(conversation_id)
+
+    if thread is None:
+        # Return an empty shell so evaluators can still hit the endpoint safely.
+        return ThreadSnapshot(
+            conversation_id=conversation_id,
+            status="not_found",
+            current_workflow=None,
+            workflow_step=None,
+            is_escalated=False,
+            escalated_at=None,
+            messages=[],
+        )
+
+    return ThreadSnapshot(
+        conversation_id=thread.external_thread_id,
+        status=thread.status,
+        current_workflow=thread.current_workflow,
+        workflow_step=thread.workflow_step,
+        is_escalated=thread.is_escalated,
+        escalated_at=thread.escalated_at,
+        messages=messages,
     )

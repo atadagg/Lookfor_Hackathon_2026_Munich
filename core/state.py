@@ -41,6 +41,18 @@ class AgentState(TypedDict, total=False):
     any workflow (shipping, refund, subscription, etc.).
     """
 
+    # Core identifiers for the thread / user / channel.
+    conversation_id: str
+    user_id: str
+    channel: str
+
+    # High-level routing metadata set by the receptionist.
+    intent: str
+    routed_agent: str
+
+    # Optional per-agent scratchpad for slots / extracted fields.
+    slots: Dict[str, Any]
+
     # Full conversation history for continuous memory.
     messages: Annotated[List[Message], add_messages]
 

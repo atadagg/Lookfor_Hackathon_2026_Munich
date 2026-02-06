@@ -322,6 +322,36 @@ class Checkpointer:
             escalated_at=row["escalated_at"],
         )
 
+    def get_messages(self, conversation_id: str) -> list[Dict[str, Any]]:
+        """Return all messages for a given external thread id, oldest first."""
+
+        cur = self._conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                m.role,
+                m.content,
+                m.direction,
+                m.created_at
+            FROM messages AS m
+            JOIN threads AS t
+              ON m.thread_id = t.id
+            WHERE t.external_thread_id = ?
+            ORDER BY m.id ASC
+            """,
+            (conversation_id,),
+        )
+        rows = cur.fetchall()
+        return [
+            {
+                "role": row["role"],
+                "content": row["content"],
+                "direction": row["direction"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
     # ------------------------------------------------------------------
     # LangGraph integration
     # ------------------------------------------------------------------

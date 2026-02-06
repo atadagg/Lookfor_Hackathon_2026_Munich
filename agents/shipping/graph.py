@@ -31,6 +31,9 @@ from .tools import get_order_status
 
 def _ensure_internal_data(state: AgentState) -> Dict[str, Any]:
     internal = state.get("internal_data") or {}
+    # Ensure we always have a place to record tool traces.
+    if "tool_traces" not in internal:
+        internal["tool_traces"] = []
     state["internal_data"] = internal
     return internal
 
@@ -74,7 +77,14 @@ async def node_check_order_status(state: AgentState) -> AgentState:
 
     tool_resp = await get_order_status(shopify_customer_id=shopify_customer_id)
 
-    internal["last_tool"] = {"name": "get_order_status", "response": tool_resp.model_dump()}
+    # Record tool call for observability.
+    internal.setdefault("tool_traces", []).append(
+        {
+            "name": "get_order_status",
+            "inputs": {"shopify_customer_id": shopify_customer_id},
+            "output": tool_resp.model_dump(),
+        }
+    )
 
     if not tool_resp.success:
         # Tool failure – safest is to escalate.
