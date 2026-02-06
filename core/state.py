@@ -1,39 +1,70 @@
-"""Global `AgentState` definition shared across router and all specialists.
+"""Typed AgentState definition shared across router and specialist agents.
 
-Keep this minimal for now; you can expand it during the hackathon as
-requirements become clearer.
+This module defines the **macro state** that flows through LangGraph.
+It is intentionally minimal and uses `TypedDict` + `Annotated` so it
+plays nicely with LangGraph's `add_messages` helper.
+
+The vertical slice in this hackathon focuses on the **shipping** /
+WISMO workflow, but the same state container can be reused for other
+specialists (refunds, subscriptions, etc.).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional, TypedDict
+
+from langgraph.graph import add_messages
+from typing_extensions import Annotated
 
 
-@dataclass
-class Message:
-    role: str
+class Message(TypedDict):
+    """Single chat message exchanged in the session."""
+
+    role: Literal["user", "assistant", "system"]
     content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass
-class AgentState:
-    """Top-level state that flows through the router and specialist graphs."""
+class CustomerInfo(TypedDict, total=False):
+    """Customer metadata provided at email session start."""
 
-    conversation_id: str
-    messages: List[Message] = field(default_factory=list)
-
-    # High-level routing info (set by router)
-    intent: Optional[str] = None
-    routed_agent: Optional[str] = None
-
-    # Arbitrary scratchpad for graphs / tools
-    slots: Dict[str, Any] = field(default_factory=dict)
-
-    # Persistence / metadata hooks
-    user_id: Optional[str] = None
-    channel: Optional[str] = None  # e.g. "web", "sms", "email"
+    email: str
+    first_name: str
+    last_name: str
+    shopify_customer_id: str
 
 
-__all__ = ["Message", "AgentState"]
+class AgentState(TypedDict, total=False):
+    """Top-level state that flows through router and specialist graphs.
+
+    Fields are deliberately generic so the same container can represent
+    any workflow (shipping, refund, subscription, etc.).
+    """
+
+    # Full conversation history for continuous memory.
+    messages: Annotated[List[Message], add_messages]
+
+    # Customer identity & Shopify linkage.
+    customer_info: CustomerInfo
+
+    # Name of the active workflow, e.g. "shipping".
+    current_workflow: str
+
+    # Fine-grained step label within the workflow, e.g. "checked_status",
+    # "wait_promise_set", "escalated".
+    workflow_step: str
+
+    # Arbitrary scratchpad for tool outputs and intermediate data.
+    # Example keys for shipping:
+    # - "order_status"
+    # - "tracking_url"
+    # - "wait_promise_until" (ISO8601 date string)
+    internal_data: Dict[str, Any]
+
+    # Escalation flag + optional metadata.
+    is_escalated: bool
+    escalated_at: Optional[datetime]
+
+
+__all__ = ["Message", "CustomerInfo", "AgentState"]
+
