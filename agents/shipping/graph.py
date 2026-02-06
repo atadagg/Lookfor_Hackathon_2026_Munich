@@ -2,15 +2,19 @@
 
 Graph structure
 ---------------
-    check_status ──┬── [escalated] ──> END
+    check_status ──┬── [escalated]         ──> END
+                   ├── [awaiting_order_id]  ──> END  (wait for customer reply)
                    └──> decide_action ──┬── [escalated] ──> END
                                         └──> generate_response ──> END
 
 Nodes
 -----
-1. **check_status**        – call the order-status tool; store results.
-2. **decide_action**       – apply wait-promise / escalation rules (deterministic).
-3. **generate_response**   – use GPT to compose a natural customer reply.
+1. **check_status**         call the order-status tool; store results.
+   - If no order found → ask the customer for their order number.
+   - If resuming from ``awaiting_order_id`` → extract order # from
+     the latest message and retry the lookup.
+2. **decide_action**        apply wait-promise / escalation rules (deterministic).
+3. **generate_response**    use GPT to compose a natural customer reply.
 
 All nodes return *partial* state dicts so LangGraph can merge them
 cleanly (no ``add_messages`` reducer — we manage the messages list
@@ -28,7 +32,11 @@ from core.llm import get_async_openai_client
 from core.state import AgentState, Message
 from schemas.internal import EscalationSummary
 from .prompts import shipping_system_prompt
-from .tools import get_order_status
+from .tools import (
+    extract_order_id,
+    get_order_by_id,
+    get_order_status,
+)
 
 
 # ── helpers ────────────────────────────────────────────────────────
@@ -41,24 +49,123 @@ def _fresh_internal(state: AgentState) -> Dict[str, Any]:
     return internal
 
 
+def _latest_user_text(state: AgentState) -> str:
+    """Return the content of the most recent user message."""
+    for msg in reversed(state.get("messages", [])):
+        if msg.get("role") == "user":
+            return msg.get("content", "")
+    return ""
+
+
 # ── Node 1 — check order status ───────────────────────────────────
 
 
 async def node_check_order_status(state: AgentState) -> dict:
-    """Fetch the latest order status via the tool and store it."""
+    """Fetch the latest order status via the tool and store it.
+
+    Handles three paths:
+    * Normal first call — look up by ``shopify_customer_id``.
+    * Resuming after ``awaiting_order_id`` — extract order # from the
+      latest user message and call ``get_order_by_id``.
+    * No orders found — ask the customer for their order number.
+    """
 
     internal = _fresh_internal(state)
-
     customer = state.get("customer_info") or {}
     shopify_customer_id = customer.get("shopify_customer_id")
+    prev_step = state.get("workflow_step") or ""
 
-    # No customer id → escalate immediately
+    # ── Path A: resuming after we asked for an order ID ────────────
+    if prev_step == "awaiting_order_id":
+        latest_text = _latest_user_text(state)
+        extracted_id = extract_order_id(latest_text)
+
+        if not extracted_id:
+            # Customer didn't provide a recognisable order number.
+            # Ask one more time; if this is the second miss, escalate.
+            ask_count = internal.get("_order_id_ask_count", 1)
+            if ask_count >= 2:
+                internal["escalation_summary"] = EscalationSummary(
+                    reason="order_id_not_provided",
+                    details={"latest_message": latest_text},
+                ).model_dump()
+                new_msg = Message(
+                    role="assistant",
+                    content=(
+                        "I still couldn't find an order number in your message. "
+                        "To make sure you get the right support, I'm looping in "
+                        "Monica, our Head of CS, who will take it from here."
+                    ),
+                )
+                return {
+                    "is_escalated": True,
+                    "escalated_at": datetime.utcnow(),
+                    "internal_data": internal,
+                    "messages": list(state.get("messages", [])) + [new_msg],
+                    "workflow_step": "escalated_no_order_id",
+                }
+
+            internal["_order_id_ask_count"] = ask_count + 1
+            new_msg = Message(
+                role="assistant",
+                content=(
+                    "I couldn't spot an order number in your message. "
+                    "Could you share it? It usually looks like #12345 or NP12345."
+                ),
+            )
+            return {
+                "internal_data": internal,
+                "messages": list(state.get("messages", [])) + [new_msg],
+                "workflow_step": "awaiting_order_id",
+            }
+
+        # We have an order ID — look it up directly
+        tool_resp = await get_order_by_id(order_id=extracted_id)
+
+        internal["tool_traces"].append(
+            {
+                "name": "get_order_by_id",
+                "inputs": {"order_id": extracted_id},
+                "output": tool_resp.model_dump(),
+            }
+        )
+
+        if not tool_resp.success:
+            internal["escalation_summary"] = EscalationSummary(
+                reason="order_lookup_failed",
+                details={"error": tool_resp.error or "unknown", "order_id": extracted_id},
+            ).model_dump()
+            new_msg = Message(
+                role="assistant",
+                content=(
+                    "I wasn't able to pull up that order. To make sure this "
+                    "is handled correctly, I'm looping in Monica, our Head "
+                    "of CS, who will take it from here."
+                ),
+            )
+            return {
+                "is_escalated": True,
+                "escalated_at": datetime.utcnow(),
+                "internal_data": internal,
+                "messages": list(state.get("messages", [])) + [new_msg],
+                "workflow_step": "escalated_tool_error",
+            }
+
+        data = tool_resp.data
+        internal["order_id"] = data.get("order_id")
+        internal["order_status"] = data.get("status")
+        internal["tracking_url"] = data.get("tracking_url")
+        return {
+            "internal_data": internal,
+            "workflow_step": "checked_status",
+        }
+
+    # ── Path B: no customer id → escalate ──────────────────────────
     if not shopify_customer_id:
         internal["escalation_summary"] = EscalationSummary(
             reason="missing_shopify_id",
             details={"customer_info": customer},
         ).model_dump()
-
         new_msg = Message(
             role="assistant",
             content=(
@@ -75,9 +182,9 @@ async def node_check_order_status(state: AgentState) -> dict:
             "workflow_step": "escalated_missing_id",
         }
 
+    # ── Path C: normal lookup by shopify_customer_id ───────────────
     tool_resp = await get_order_status(shopify_customer_id=shopify_customer_id)
 
-    # Record for observability
     internal["tool_traces"].append(
         {
             "name": "get_order_status",
@@ -91,7 +198,6 @@ async def node_check_order_status(state: AgentState) -> dict:
             reason="order_lookup_failed",
             details={"error": tool_resp.error or "unknown"},
         ).model_dump()
-
         new_msg = Message(
             role="assistant",
             content=(
@@ -108,6 +214,24 @@ async def node_check_order_status(state: AgentState) -> dict:
             "workflow_step": "escalated_tool_error",
         }
 
+    # ── Path D: tool succeeded but no orders found ─────────────────
+    if tool_resp.data.get("no_orders"):
+        internal["_order_id_ask_count"] = 1
+        new_msg = Message(
+            role="assistant",
+            content=(
+                "I couldn't find any recent orders under your account. "
+                "Could you share your order number so I can look it up? "
+                "It usually looks like #12345 or NP12345."
+            ),
+        )
+        return {
+            "internal_data": internal,
+            "messages": list(state.get("messages", [])) + [new_msg],
+            "workflow_step": "awaiting_order_id",
+        }
+
+    # ── Path E: order found — store details ────────────────────────
     data = tool_resp.data
     internal["order_id"] = data.get("order_id")
     internal["order_status"] = data.get("status")
@@ -330,8 +454,10 @@ def _step_for_action(action: str) -> str:
 
 
 def _after_check_status(state: AgentState) -> str:
-    """Route to END if escalated, otherwise continue to decide_action."""
+    """Route to END if escalated or awaiting order ID, else continue."""
     if state.get("is_escalated"):
+        return END
+    if state.get("workflow_step") == "awaiting_order_id":
         return END
     return "decide_action"
 
