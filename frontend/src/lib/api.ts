@@ -38,6 +38,15 @@ export interface ToolTrace {
   output: Record<string, unknown>;
 }
 
+/** One turn in the conversation: which agent ran and its traces. */
+export interface AgentTurnRecord {
+  agent: string;
+  intent?: string;
+  current_workflow?: string;
+  workflow_step?: string;
+  tool_traces: ToolTrace[];
+}
+
 export interface ThreadState {
   conversation_id: string;
   messages: Array<{ role: string; content: string }>;
@@ -47,6 +56,8 @@ export interface ThreadState {
   current_workflow: string;
   workflow_step: string;
   is_escalated: boolean;
+  /** Per-turn history so UI can show which agent handled each turn (e.g. wismo → refund). */
+  agent_turn_history?: AgentTurnRecord[];
   escalation_summary?: Record<string, unknown>;
   internal_data?: {
     tool_traces?: ToolTrace[];

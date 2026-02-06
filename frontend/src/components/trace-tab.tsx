@@ -1,6 +1,6 @@
 "use client";
 
-import { ThreadState, ToolTrace } from "@/lib/api";
+import { AgentTurnRecord, ThreadState, ToolTrace } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -21,10 +21,59 @@ interface GraphNode {
 
 function buildGraphNodes(state: ThreadState): GraphNode[] {
   const nodes: GraphNode[] = [];
-  const traces: ToolTrace[] = state.internal_data?.tool_traces || [];
+  const history = state.agent_turn_history || [];
   const internalData = state.internal_data || {};
 
-  // 1. Intent classification node
+  // When we have per-turn history, show each turn (route + tools) so agent changes are visible
+  if (history.length > 0) {
+    history.forEach((turn, turnIdx) => {
+      const isLastTurn = turnIdx === history.length - 1;
+      nodes.push({
+        id: `route-${turnIdx}`,
+        label: "Routed",
+        sublabel: turn.agent,
+        status: "completed",
+        type: "route",
+      });
+      (turn.tool_traces || []).forEach((trace, i) => {
+        const isSuccess =
+          trace.output &&
+          typeof trace.output === "object" &&
+          "success" in trace.output &&
+          (trace.output as Record<string, unknown>).success === true;
+        nodes.push({
+          id: `turn-${turnIdx}-tool-${i}`,
+          label: trace.name,
+          sublabel: isSuccess ? "success" : "failed",
+          status: "completed",
+          type: "tool",
+        });
+      });
+      if (isLastTurn && (state.is_escalated || state.workflow_step)) {
+        if (state.is_escalated) {
+          nodes.push({
+            id: "escalated",
+            label: "Escalated",
+            sublabel: "Handed to human agent",
+            status: "active",
+            type: "escalation",
+          });
+        } else {
+          nodes.push({
+            id: "responded",
+            label: "Response Sent",
+            sublabel: (state.workflow_step || "").replace(/_/g, " "),
+            status: "active",
+            type: "end",
+          });
+        }
+      }
+    });
+    if (nodes.length > 0) return nodes;
+  }
+
+  // Fallback: single-agent view (no agent_turn_history)
+  const traces: ToolTrace[] = state.internal_data?.tool_traces || [];
   nodes.push({
     id: "intent",
     label: "Intent Classified",
@@ -32,8 +81,6 @@ function buildGraphNodes(state: ThreadState): GraphNode[] {
     status: "completed",
     type: "start",
   });
-
-  // 2. Routing node
   if (state.routed_agent) {
     nodes.push({
       id: "route",
@@ -43,15 +90,12 @@ function buildGraphNodes(state: ThreadState): GraphNode[] {
       type: "route",
     });
   }
-
-  // 3. Tool call nodes (real data from tool_traces)
   traces.forEach((trace, i) => {
     const isSuccess =
       trace.output &&
       typeof trace.output === "object" &&
       "success" in trace.output &&
       (trace.output as Record<string, unknown>).success === true;
-
     nodes.push({
       id: `tool-${i}`,
       label: trace.name,
@@ -60,8 +104,6 @@ function buildGraphNodes(state: ThreadState): GraphNode[] {
       type: "tool",
     });
   });
-
-  // 4. Decision nodes from internal_data (skip tool_traces key)
   const decisionKeys = ["decided_action", "order_status", "promise_day_label", "wait_promise_until"];
   for (const key of decisionKeys) {
     if (internalData[key] !== undefined) {
@@ -74,8 +116,6 @@ function buildGraphNodes(state: ThreadState): GraphNode[] {
       });
     }
   }
-
-  // 5. End node
   if (state.is_escalated) {
     nodes.push({
       id: "escalated",
@@ -223,6 +263,65 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
+function TurnTimeline({ turns }: { turns: AgentTurnRecord[] }) {
+  if (!turns.length) return null;
+  return (
+    <div className="rounded-lg border bg-card overflow-hidden">
+      <div className="px-5 py-3.5 border-b bg-muted/20">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <svg className="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Conversation turns (agent changes)
+          <Badge variant="secondary" className="text-[10px] ml-1">{turns.length} turn{turns.length !== 1 ? "s" : ""}</Badge>
+        </h3>
+      </div>
+      <div className="divide-y divide-border">
+        {turns.map((turn, idx) => (
+          <div key={idx} className="p-4">
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <span className="text-[11px] text-muted-foreground font-mono">Turn {idx + 1}</span>
+              <Badge className="text-xs">{turn.agent}</Badge>
+              {turn.intent && (
+                <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={turn.intent}>
+                  {turn.intent}
+                </span>
+              )}
+              {turn.workflow_step && (
+                <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{turn.workflow_step}</code>
+              )}
+            </div>
+            {(turn.tool_traces?.length ?? 0) > 0 && (
+              <div className="mt-2 space-y-1.5">
+                {turn.tool_traces.map((t, i) => {
+                  const ok =
+                    t.output &&
+                    typeof t.output === "object" &&
+                    "success" in t.output &&
+                    (t.output as Record<string, unknown>).success === true;
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-[11px]">
+                      <code className="font-mono text-foreground">{t.name}</code>
+                      <span
+                        className={cn(
+                          "px-1.5 py-0.5 rounded-full font-medium",
+                          ok ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" : "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400"
+                        )}
+                      >
+                        {ok ? "OK" : "ERROR"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function TraceTab({ state }: TraceTabProps) {
   if (!state) {
     return (
@@ -235,10 +334,14 @@ export function TraceTab({ state }: TraceTabProps) {
   const traces = state.internal_data?.tool_traces || [];
   const internalData = state.internal_data || {};
   const decisionEntries = Object.entries(internalData).filter(([k]) => k !== "tool_traces");
+  const turnHistory = state.agent_turn_history || [];
 
   return (
     <ScrollArea className="h-full">
       <div className="p-6 max-w-3xl mx-auto space-y-6">
+        {/* Per-turn timeline when agent changed (e.g. wismo → refund) */}
+        <TurnTimeline turns={turnHistory} />
+
         {/* Real data-driven execution flow graph */}
         <WorkflowNodeGraph state={state} />
 
@@ -301,25 +404,41 @@ export function TraceTab({ state }: TraceTabProps) {
           </div>
         )}
 
-        {/* Tool calls timeline */}
+        {/* Tool calls timeline (all turns when agent_turn_history exists) */}
         <div>
           <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
             <svg className="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
             </svg>
             Tool Call Details
-            {traces.length > 0 && (
-              <Badge variant="secondary" className="text-[10px] ml-1">{traces.length}</Badge>
+            {(turnHistory.length > 0
+              ? turnHistory.flatMap((t) => t.tool_traces || []).length
+              : traces.length) > 0 && (
+              <Badge variant="secondary" className="text-[10px] ml-1">
+                {turnHistory.length > 0
+                  ? turnHistory.flatMap((t) => t.tool_traces || []).length
+                  : traces.length}
+              </Badge>
             )}
           </h3>
 
-          {traces.length === 0 ? (
+          {(turnHistory.length > 0 ? turnHistory.flatMap((t) => t.tool_traces || []).length : traces.length) === 0 ? (
             <div className="text-center py-8 text-xs text-muted-foreground">
               No tool calls recorded in this session.
             </div>
           ) : (
             <div className="space-y-3">
-              {traces.map((trace, i) => {
+              {(turnHistory.length > 0
+                ? turnHistory.flatMap((turn, turnIdx) =>
+                    (turn.tool_traces || []).map((trace, i) => ({
+                      trace,
+                      turnAgent: turn.agent,
+                      turnIdx: turnIdx + 1,
+                      key: `turn-${turnIdx}-tool-${i}`,
+                    }))
+                  )
+                : traces.map((trace, i) => ({ trace, turnAgent: null, turnIdx: null, key: `tool-${i}` }))
+              ).map(({ trace, turnAgent, turnIdx, key }) => {
                 const isSuccess =
                   trace.output &&
                   typeof trace.output === "object" &&
@@ -327,15 +446,17 @@ export function TraceTab({ state }: TraceTabProps) {
                   (trace.output as Record<string, unknown>).success === true;
 
                 return (
-                  <div key={i} className="rounded-lg border bg-card overflow-hidden">
+                  <div key={key} className="rounded-lg border bg-card overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-2.5 bg-muted/20 border-b">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          {String(i + 1).padStart(2, "0")}
-                        </span>
                         <code className="text-xs font-semibold font-mono text-foreground">
                           {trace.name}
                         </code>
+                        {turnAgent != null && (
+                          <Badge variant="outline" className="text-[9px] font-normal">
+                            Turn {turnIdx} · {turnAgent}
+                          </Badge>
+                        )}
                       </div>
                       <div
                         className={cn(
