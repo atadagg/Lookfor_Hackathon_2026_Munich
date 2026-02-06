@@ -7,6 +7,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import router.logic as router_logic
 from router.logic import classify_intent, RouteDecision
 from core.state import AgentState, Message
 
@@ -21,12 +22,18 @@ async def _run_classify_with_error() -> tuple[RouteDecision, AgentState]:
 def test_classify_intent_escalates_on_llm_error(monkeypatch):
     """If the LLM call fails, the thread should be escalated, not auto-routed."""
 
-    import openai
+    class FakeClient:
+        class _Chat:
+            class _Completions:
+                async def create(self, *args, **kwargs):
+                    raise RuntimeError("LLM down")
 
-    async def fake_acreate(*args, **kwargs):
-        raise RuntimeError("LLM down")
+            completions = _Completions()
 
-    monkeypatch.setattr(openai.ChatCompletion, "acreate", fake_acreate, raising=True)
+        chat = _Chat()
+
+    # Patch the client getter so classify_intent sees our failing client.
+    monkeypatch.setattr(router_logic, "_get_client", lambda: FakeClient(), raising=True)
 
     decision, state = asyncio.run(_run_classify_with_error())
 
