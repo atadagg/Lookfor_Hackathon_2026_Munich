@@ -27,8 +27,8 @@ def _run(coro):
 async def test_check_order_status_records_tool_trace_and_internal_fields(monkeypatch):
     """Successful tool call populates internal fields and tool_traces."""
 
-    async def fake_get_order_status(*, shopify_customer_id: str) -> ToolResponse:  # type: ignore[override]
-        assert shopify_customer_id == "cust-123"
+    async def fake_get_order_status(*, email: str) -> ToolResponse:
+        assert email == "test@example.com"
         return ToolResponse(
             success=True,
             data={
@@ -44,7 +44,7 @@ async def test_check_order_status_records_tool_trace_and_internal_fields(monkeyp
 
     state: AgentState = {
         "messages": [Message(role="user", content="Where is my order?")],
-        "customer_info": {"shopify_customer_id": "cust-123"},
+        "customer_info": {"email": "test@example.com"},
     }
 
     new_state = await node_check_order_status(state)
@@ -59,7 +59,7 @@ async def test_check_order_status_records_tool_trace_and_internal_fields(monkeyp
     assert len(traces) == 1
     trace = traces[0]
     assert trace["name"] == "get_order_status"
-    assert trace["inputs"] == {"shopify_customer_id": "cust-123"}
+    assert trace["inputs"] == {"email": "test@example.com"}
     assert trace["output"]["success"] is True
 
 
@@ -67,7 +67,7 @@ async def test_check_order_status_records_tool_trace_and_internal_fields(monkeyp
 async def test_check_order_status_escalates_on_tool_failure(monkeypatch):
     """Tool failure should escalate with a clear summary and message."""
 
-    async def failing_get_order_status(*, shopify_customer_id: str) -> ToolResponse:  # type: ignore[override]
+    async def failing_get_order_status(*, email: str) -> ToolResponse:
         return ToolResponse(success=False, error="boom")
 
     monkeypatch.setattr(
@@ -76,7 +76,7 @@ async def test_check_order_status_escalates_on_tool_failure(monkeypatch):
 
     state: AgentState = {
         "messages": [Message(role="user", content="Where is my order?")],
-        "customer_info": {"shopify_customer_id": "cust-123"},
+        "customer_info": {"email": "test@example.com"},
     }
 
     new_state = await node_check_order_status(state)
@@ -127,13 +127,9 @@ async def test_decide_wait_or_escalate_sets_promise_for_in_transit(monkeypatch):
     internal = new_state.get("internal_data") or {}
     # Wednesday -> promise until Friday of the same week.
     assert internal.get("wait_promise_until") == "2024-01-05"
-    assert new_state.get("workflow_step") == "wait_promise_set"
-
-    messages = new_state.get("messages") or []
-    last = messages[-1]
-    assert last["role"] == "assistant"
-    assert "on the way" in last["content"]
-    assert "Friday" in last["content"]
+    assert internal.get("decided_action") == "wait_promise"
+    assert internal.get("promise_day_label") == "Friday"
+    assert new_state.get("workflow_step") == "action_decided"
 
 
 @pytest.mark.asyncio
@@ -200,5 +196,5 @@ async def test_wismo_agent_sets_current_workflow_and_delegates(monkeypatch):
     new_state = await agent.handle(state)
 
     # WismoAgent should tag the workflow and call into the app.
-    assert new_state.get("current_workflow") == "wismo"
+    assert new_state.get("current_workflow") == "shipping"
     assert new_state.get("through_dummy_app") is True
