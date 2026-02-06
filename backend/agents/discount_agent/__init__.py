@@ -1,3 +1,3 @@
-from .agent import DiscountAgent
+from .graph import DiscountAgent
 
 __all__ = ["DiscountAgent"]

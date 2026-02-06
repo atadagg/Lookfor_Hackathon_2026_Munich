@@ -1,3 +1,3 @@
-from .agent import WrongItemAgent
+from .graph import WrongItemAgent
 
 __all__ = ["WrongItemAgent"]

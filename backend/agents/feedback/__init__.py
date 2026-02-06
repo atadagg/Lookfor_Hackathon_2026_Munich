@@ -1,3 +1,3 @@
-from .agent import FeedbackAgent
+from .graph import FeedbackAgent
 
 __all__ = ["FeedbackAgent"]
