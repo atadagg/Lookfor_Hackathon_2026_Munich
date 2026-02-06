@@ -23,7 +23,11 @@ class SubscriptionAgent(BaseAgent):
     async def handle(self, state: AgentState) -> AgentState:
         """Handle a subscription conversation turn (stub)."""
 
-        state.slots.setdefault("subscription", {})["handled"] = True
+        slots = state.get("slots") or {}
+        sub = slots.get("subscription") or {}
+        sub["handled"] = True
+        slots["subscription"] = sub
+        state["slots"] = slots
         return state
 
 

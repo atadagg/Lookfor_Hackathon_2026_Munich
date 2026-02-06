@@ -1,18 +1,17 @@
 """Triage logic for routing conversations to specialist agents.
 
-This module is intentionally lightweight so you can wire in your
-preferred LLM + LangGraph stack later.
+Uses the OpenAI v2 async client to classify intent, then maps the
+classification to one of the registered specialist agent names.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import json
 
-import openai
-
+from core.llm import get_async_openai_client
 from core.state import AgentState, Message
 from schemas.internal import EscalationSummary
 from .prompt import INTENT_CLASSIFICATION_PROMPT
@@ -25,11 +24,14 @@ class RouteDecision:
     confidence: float
 
 
-def _escalate_due_to_llm_error(state: AgentState, error: str | None = None) -> RouteDecision:
+def _escalate_due_to_llm_error(
+    state: AgentState,
+    error: Optional[str] = None,
+) -> RouteDecision:
     """Mark the thread as escalated when routing LLMs fail.
 
     This ensures we do not silently fall back to automation when the LLM
-    is unavailable or misbehaves. Instead, we set a clear escalation
+    is unavailable or misbehaves.  Instead, we set a clear escalation
     summary and add a user-facing assistant message.
     """
 
@@ -68,8 +70,8 @@ def _escalate_due_to_llm_error(state: AgentState, error: str | None = None) -> R
 async def classify_intent(state: AgentState) -> RouteDecision:
     """Call OpenAI to classify the user's request.
 
-    This uses the latest conversation messages from `AgentState` and the
-    `INTENT_CLASSIFICATION_PROMPT` to select one of the predefined issue
+    This uses the latest conversation messages from ``AgentState`` and the
+    ``INTENT_CLASSIFICATION_PROMPT`` to select one of the predefined issue
     types and map it to a specialist agent.
     """
 
@@ -79,18 +81,24 @@ async def classify_intent(state: AgentState) -> RouteDecision:
     user_texts = [m["content"] for m in messages if m.get("role") == "user"]
     latest_user = user_texts[-1] if user_texts else ""
 
-    history_snippet = "\n\n".join([m["content"] for m in messages[-5:]]) if messages else ""
+    history_snippet = (
+        "\n\n".join([m["content"] for m in messages[-5:]]) if messages else ""
+    )
 
     system_prompt = INTENT_CLASSIFICATION_PROMPT
     user_prompt = (
-        "Latest user message:\n" + latest_user + "\n\n" +
-        "Recent conversation snippet (may be empty):\n" + history_snippet
+        "Latest user message:\n"
+        + latest_user
+        + "\n\nRecent conversation snippet (may be empty):\n"
+        + history_snippet
     )
 
     try:
-        resp = await openai.ChatCompletion.acreate(
+        client = get_async_openai_client()
+        resp = await client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0.0,
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -101,7 +109,10 @@ async def classify_intent(state: AgentState) -> RouteDecision:
         # back silently to automation.
         return _escalate_due_to_llm_error(state, str(exc))
 
-    raw = resp.choices[0].message["content"]  # type: ignore[index]
+    raw = resp.choices[0].message.content or ""
+    if not raw.strip():
+        return _escalate_due_to_llm_error(state, "empty_llm_response")
+
     try:
         data: Dict[str, Any] = json.loads(raw)
     except Exception as exc:
@@ -113,13 +124,15 @@ async def classify_intent(state: AgentState) -> RouteDecision:
     routed_agent = data.get("routed_agent") or "wismo"
     confidence = float(data.get("confidence") or 0.0)
 
-    return RouteDecision(intent=intent, routed_agent=routed_agent, confidence=confidence)
+    return RouteDecision(
+        intent=intent, routed_agent=routed_agent, confidence=confidence
+    )
 
 
 async def route(state: AgentState) -> AgentState:
-    """Annotate `AgentState` with routing metadata.
+    """Annotate ``AgentState`` with routing metadata.
 
-    This will typically be called from `main.py` before handing off to a
+    This will typically be called from the server before handing off to a
     specialist agent graph.
     """
 

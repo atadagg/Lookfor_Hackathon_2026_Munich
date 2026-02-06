@@ -14,7 +14,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 
-from langgraph.graph import add_messages
 from typing_extensions import Annotated
 
 
@@ -54,7 +53,7 @@ class AgentState(TypedDict, total=False):
     slots: Dict[str, Any]
 
     # Full conversation history for continuous memory.
-    messages: Annotated[List[Message], add_messages]
+    messages: List[Message]
 
     # Customer identity & Shopify linkage.
     customer_info: CustomerInfo

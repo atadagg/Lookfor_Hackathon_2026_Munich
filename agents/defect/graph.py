@@ -23,7 +23,11 @@ class DefectAgent(BaseAgent):
     async def handle(self, state: AgentState) -> AgentState:
         """Handle a defect conversation turn (stub)."""
 
-        state.slots.setdefault("defect", {})["handled"] = True
+        slots = state.get("slots") or {}
+        defect = slots.get("defect") or {}
+        defect["handled"] = True
+        slots["defect"] = defect
+        state["slots"] = slots
         return state
 
 

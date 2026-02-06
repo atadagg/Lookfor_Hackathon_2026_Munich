@@ -159,7 +159,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
         last_assistant_message = last_assistant.get("content", "") if assistant_messages else None
 
         return ChatResponse(
-            conversation_id=state.conversation_id,
+            conversation_id=state.get("conversation_id", req.conversation_id),
             agent="escalated",
             state={
                 "intent": state.get("intent"),
