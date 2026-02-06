@@ -233,6 +233,20 @@ async def chat(req: ChatRequest) -> ChatResponse:
         })
         state["messages"] = msgs
 
+    # Append this turn to agent_turn_history so the UI can show which agent
+    # handled each turn (e.g. wismo → refund) and preserve tool traces.
+    internal = state.get("internal_data") or {}
+    current_traces = list(internal.get("tool_traces") or [])
+    turn_history: List[Dict[str, Any]] = list(state.get("agent_turn_history") or [])
+    turn_history.append({
+        "agent": agent.name,
+        "intent": state.get("intent"),
+        "current_workflow": state.get("current_workflow"),
+        "workflow_step": state.get("workflow_step"),
+        "tool_traces": current_traces,
+    })
+    state["agent_turn_history"] = turn_history
+
     # Persist the updated macro state so future turns can resume from it.
     checkpointer.save_state(req.conversation_id, state)
 
@@ -280,6 +294,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
             "is_escalated": state.get("is_escalated", False),
             "escalation_summary": escalation_summary,
             "last_assistant_message": last_assistant_message,
+            "agent_turn_history": state.get("agent_turn_history"),
             "internal_data": {
                 "tool_traces": tool_traces,
             },
