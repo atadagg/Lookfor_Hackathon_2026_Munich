@@ -10,8 +10,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agents.shipping import graph as shipping_graph
-from agents.shipping.graph import node_check_order_status, node_decide_wait_or_escalate
+from agents.wismo import graph as shipping_graph
+from agents.wismo.graph import node_check_order_status, node_decide_wait_or_escalate
 from agents.wismo.graph import WismoAgent
 from core.state import AgentState, Message
 from schemas.internal import ToolResponse
@@ -189,7 +189,7 @@ async def test_wismo_agent_sets_current_workflow_and_delegates(monkeypatch):
 
     # Ensure WismoAgent.build_graph returns our DummyApp.
     monkeypatch.setattr(
-        "agents.wismo.graph.build_shipping_graph", lambda: dummy_app, raising=True
+        "agents.wismo.graph.build_wismo_graph", lambda: dummy_app, raising=True
     )
 
     agent = WismoAgent()
@@ -200,5 +200,5 @@ async def test_wismo_agent_sets_current_workflow_and_delegates(monkeypatch):
     new_state = await agent.handle(state)
 
     # WismoAgent should tag the workflow and call into the app.
-    assert new_state.get("current_workflow") == "shipping"
+    assert new_state.get("current_workflow") == "wismo"
     assert new_state.get("through_dummy_app") is True
