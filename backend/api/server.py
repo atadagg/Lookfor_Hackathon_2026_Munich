@@ -283,6 +283,9 @@ async def chat(req: ChatRequest) -> ChatResponse:
 
     conv_id = state.get("conversation_id", req.conversation_id)
 
+    # Pass through full internal_data so agents can expose order_id, order_gid, etc.
+    internal_data_response = dict(internal)
+
     return ChatResponse(
         conversation_id=conv_id,
         agent=agent.name,
@@ -295,9 +298,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
             "escalation_summary": escalation_summary,
             "last_assistant_message": last_assistant_message,
             "agent_turn_history": state.get("agent_turn_history"),
-            "internal_data": {
-                "tool_traces": tool_traces,
-            },
+            "internal_data": internal_data_response,
         },
     )
 

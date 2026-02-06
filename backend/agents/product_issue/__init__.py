@@ -1,3 +1,3 @@
-from .agent import ProductIssueAgent
+from .graph import ProductIssueAgent
 
 __all__ = ["ProductIssueAgent"]
