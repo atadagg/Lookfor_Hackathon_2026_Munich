@@ -200,5 +200,5 @@ async def test_wismo_agent_sets_current_workflow_and_delegates(monkeypatch):
     new_state = await agent.handle(state)
 
     # WismoAgent should tag the workflow and call into the app.
-    assert new_state.get("current_workflow") == "shipping"
+    assert new_state.get("current_workflow") == "wismo"
     assert new_state.get("through_dummy_app") is True
