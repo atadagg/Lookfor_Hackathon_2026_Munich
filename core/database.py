@@ -1,26 +1,345 @@
-"""Persistence layer and LangGraph checkpointer wiring.
+"""SQLite persistence layer and LangGraph checkpointer wiring.
 
-During the hackathon you can plug in a real database (Postgres, Redis,
-Dynamo, etc.) or just use in-memory dicts.
+This keeps things **very simple** and does two jobs:
+
+1. Provide a SQLite-backed checkpointer for LangGraph using its built-in
+   `SqliteSaver`.
+2. Create two tiny tables for your own reporting needs:
+   - `threads`  – one row per email / ticket thread, with status + state.
+   - `messages` – one row per email/message in that thread.
+
+You can grow this later (Postgres, more columns, etc.) without changing
+the public `Checkpointer` interface.
 """
 
 from __future__ import annotations
 
+import json
+import sqlite3
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Dict, Optional
+
+try:  # LangGraph optional import so tests don't explode without it
+    from langgraph.checkpoint.sqlite import SqliteSaver
+except Exception:  # pragma: no cover - handled gracefully at runtime
+    SqliteSaver = None  # type: ignore[assignment]
+
+
+def _utc_now_iso() -> str:
+    """Return a simple UTC timestamp string."""
+
+    # Example: "2026-02-06T12:34:56.789123Z"
+    return datetime.utcnow().isoformat() + "Z"
+
+
+@dataclass
+class ThreadRecord:
+    """Minimal view of a thread row used by application code."""
+
+    id: int
+    external_thread_id: str
+    status: str
+    current_workflow: Optional[str]
+    workflow_step: Optional[str]
+    is_escalated: bool
+    escalated_at: Optional[str]
 
 
 class Checkpointer:
-    """Very small placeholder around whatever LangGraph uses for state storage."""
+    """SQLite-backed persistence + LangGraph checkpointer helper.
 
-    def __init__(self) -> None:
-        # For now keep everything in-memory
-        self._store: Dict[str, Dict[str, Any]] = {}
+    - Use `save_state` / `load_state` for your own high-level state.
+    - Use `save_message` to append an email/message to a thread.
+    - Use `langgraph_saver` when compiling LangGraph graphs:
 
+        graph = build_shipping_graph()
+        cp = Checkpointer()
+        app = graph.compile(checkpointer=cp.langgraph_saver)
+    """
+
+    def __init__(self, db_path: str = "state.db") -> None:
+        self.db_path = db_path
+        # `check_same_thread=False` so FastAPI / asyncio can share the connection.
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._init_schema()
+
+        # Optional LangGraph saver that writes into the same SQLite file.
+        self._lg_saver: Optional[Any] = SqliteSaver(self.db_path) if SqliteSaver else None
+
+    # ------------------------------------------------------------------
+    # Schema
+    # ------------------------------------------------------------------
+    def _init_schema(self) -> None:
+        """Create tables if they don't exist yet.
+
+        Everything lives in a single file-backed SQLite database.
+        """
+
+        cur = self._conn.cursor()
+
+        # One row per external email / ticket thread.
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS threads (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                external_thread_id TEXT NOT NULL UNIQUE,
+
+                -- optional metadata
+                customer_email     TEXT,
+                subject            TEXT,
+
+                -- high-level status for dashboards
+                status             TEXT NOT NULL DEFAULT 'open', -- open | escalated | closed
+
+                current_workflow   TEXT,
+                workflow_step      TEXT,
+                is_escalated       INTEGER NOT NULL DEFAULT 0,
+                escalated_at       TEXT,
+
+                -- full serialized macro state (AgentState)
+                state_json         TEXT NOT NULL,
+
+                created_at         TEXT NOT NULL,
+                updated_at         TEXT NOT NULL,
+                last_message_at    TEXT
+            )
+            """
+        )
+
+        # One row per email / chat message.
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS messages (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_id       INTEGER NOT NULL
+                                   REFERENCES threads(id) ON DELETE CASCADE,
+
+                role            TEXT NOT NULL,   -- user | assistant | system
+                content         TEXT NOT NULL,
+
+                external_msg_id TEXT,
+                direction       TEXT NOT NULL,   -- inbound | outbound
+
+                created_at      TEXT NOT NULL
+            )
+            """
+        )
+
+        self._conn.commit()
+
+    # ------------------------------------------------------------------
+    # Public API for your app
+    # ------------------------------------------------------------------
     def save_state(self, conversation_id: str, state: Dict[str, Any]) -> None:
-        self._store[conversation_id] = state
+        """Upsert the thread row + snapshot of the latest AgentState.
+
+        - `conversation_id` is your external thread / ticket id.
+        - `state` is the macro AgentState (LangGraph-compatible dict).
+        """
+
+        now = _utc_now_iso()
+
+        # Derive high-level status from the state dict.
+        is_escalated = bool(state.get("is_escalated"))
+        status = "escalated" if is_escalated else "open"
+
+        escalated_at_val = state.get("escalated_at")
+        if isinstance(escalated_at_val, datetime):
+            escalated_at = escalated_at_val.isoformat() + "Z"
+        else:
+            escalated_at = escalated_at_val if escalated_at_val is not None else None
+
+        current_workflow = state.get("current_workflow")
+        workflow_step = state.get("workflow_step")
+
+        # Optional metadata from the state.
+        customer_info = state.get("customer_info") or {}
+        customer_email = customer_info.get("email")
+        subject = state.get("subject")  # keep this flexible for later
+
+        state_json = json.dumps(state, default=str)
+
+        cur = self._conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO threads (
+                external_thread_id,
+                customer_email,
+                subject,
+                status,
+                current_workflow,
+                workflow_step,
+                is_escalated,
+                escalated_at,
+                state_json,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(external_thread_id) DO UPDATE SET
+                customer_email   = excluded.customer_email,
+                subject          = excluded.subject,
+                status           = excluded.status,
+                current_workflow = excluded.current_workflow,
+                workflow_step    = excluded.workflow_step,
+                is_escalated     = excluded.is_escalated,
+                escalated_at     = excluded.escalated_at,
+                state_json       = excluded.state_json,
+                updated_at       = excluded.updated_at
+            """,
+            (
+                conversation_id,
+                customer_email,
+                subject,
+                status,
+                current_workflow,
+                workflow_step,
+                int(is_escalated),
+                escalated_at,
+                state_json,
+                now,
+                now,
+            ),
+        )
+        self._conn.commit()
 
     def load_state(self, conversation_id: str) -> Optional[Dict[str, Any]]:
-        return self._store.get(conversation_id)
+        """Return the last saved AgentState for a conversation, if any."""
+
+        cur = self._conn.cursor()
+        cur.execute(
+            "SELECT state_json FROM threads WHERE external_thread_id = ?",
+            (conversation_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        return json.loads(row["state_json"])
+
+    def save_message(
+        self,
+        conversation_id: str,
+        *,
+        role: str,
+        content: str,
+        direction: str,
+        external_msg_id: Optional[str] = None,
+    ) -> None:
+        """Append a message row and bump `last_message_at` on the thread.
+
+        If the thread doesn't exist yet, a minimal one is created with
+        an empty state dict.
+        """
+
+        now = _utc_now_iso()
+        cur = self._conn.cursor()
+
+        # Ensure the thread exists.
+        cur.execute(
+            "SELECT id FROM threads WHERE external_thread_id = ?",
+            (conversation_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            empty_state = {}
+            state_json = json.dumps(empty_state)
+            cur.execute(
+                """
+                INSERT INTO threads (
+                    external_thread_id,
+                    status,
+                    state_json,
+                    created_at,
+                    updated_at,
+                    last_message_at
+                )
+                VALUES (?, 'open', ?, ?, ?, ?)
+                """,
+                (conversation_id, state_json, now, now, now),
+            )
+            thread_id = cur.lastrowid
+        else:
+            thread_id = int(row["id"])
+            cur.execute(
+                """
+                UPDATE threads
+                SET last_message_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (now, now, thread_id),
+            )
+
+        # Insert the message.
+        cur.execute(
+            """
+            INSERT INTO messages (
+                thread_id,
+                role,
+                content,
+                external_msg_id,
+                direction,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (thread_id, role, content, external_msg_id, direction, now),
+        )
+
+        self._conn.commit()
+
+    def get_thread(self, conversation_id: str) -> Optional[ThreadRecord]:
+        """Lightweight helper to inspect the latest status of a thread."""
+
+        cur = self._conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                id,
+                external_thread_id,
+                status,
+                current_workflow,
+                workflow_step,
+                is_escalated,
+                escalated_at
+            FROM threads
+            WHERE external_thread_id = ?
+            """,
+            (conversation_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+
+        return ThreadRecord(
+            id=int(row["id"]),
+            external_thread_id=str(row["external_thread_id"]),
+            status=str(row["status"]),
+            current_workflow=row["current_workflow"],
+            workflow_step=row["workflow_step"],
+            is_escalated=bool(row["is_escalated"]),
+            escalated_at=row["escalated_at"],
+        )
+
+    # ------------------------------------------------------------------
+    # LangGraph integration
+    # ------------------------------------------------------------------
+    @property
+    def langgraph_saver(self) -> Any:
+        """Expose LangGraph's `SqliteSaver` instance.
+
+        Use this when compiling a LangGraph graph:
+
+            cp = Checkpointer()
+            app = graph.compile(checkpointer=cp.langgraph_saver)
+        """
+
+        if self._lg_saver is None:
+            raise RuntimeError(
+                "LangGraph is not installed. Add `langgraph` to requirements.txt."
+            )
+        return self._lg_saver
 
 
-__all__ = ["Checkpointer"]
+__all__ = ["Checkpointer", "ThreadRecord"]
