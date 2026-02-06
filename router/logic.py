@@ -7,9 +7,12 @@ preferred LLM + LangGraph stack later.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Dict, List
+import json
 
-from core.state import AgentState
+import openai
+
+from core.state import AgentState, Message
 from .prompt import INTENT_CLASSIFICATION_PROMPT
 
 
@@ -21,49 +24,74 @@ class RouteDecision:
 
 
 async def classify_intent(state: AgentState) -> RouteDecision:
-    """Classify the user's request and choose a specialist agent.
+    """Call OpenAI to classify the user's request.
 
-    For robustness in the hackathon setting this uses a simple
-    keyword-based heuristic that can be upgraded to an OpenAI call
-    without changing the public interface.
+    This uses the latest conversation messages from `AgentState` and the
+    `INTENT_CLASSIFICATION_PROMPT` to select one of the predefined issue
+    types and map it to a specialist agent.
     """
 
-    messages = state.get("messages", [])
-    last_user = ""
-    for m in reversed(messages):
-        if m.get("role") == "user":
-            last_user = m.get("content", "")
-            break
+    # NOTE: This assumes `openai.api_key` has already been configured
+    # at the application boundary (e.g., in `api/server.py`).
+    api_key = getattr(openai, "api_key", None)
+    if not api_key:
+        # Fail closed: if there is no API key, default to shipping/WISMO
+        # so the rest of the pipeline still works in local dev.
+        return RouteDecision(
+            intent="Shipping Delay – Neutral Status Check",
+            routed_agent="wismo",
+            confidence=0.0,
+        )
 
-    text = (last_user or "").lower()
+    openai.api_key = api_key
 
-    # Very lightweight routing rules derived from the workflow manual.
-    if any(k in text for k in ["where is my order", "where's my order", "shipping", "delivery", "tracking"]):
-        return RouteDecision(intent="shipping_delay", routed_agent="wismo", confidence=0.7)
+    messages: List[Message] = state.get("messages", [])  # type: ignore[assignment]
+    # Use the last user message as the main query, but pass the recent
+    # history for extra context.
+    user_texts = [m["content"] for m in messages if m.get("role") == "user"]
+    latest_user = user_texts[-1] if user_texts else ""
 
-    if any(k in text for k in ["missing", "wrong item", "only 2 of the 3", "incorrect item"]):
-        return RouteDecision(intent="wrong_or_missing_item", routed_agent="defect", confidence=0.7)
+    history_snippet = "\n\n".join([m["content"] for m in messages[-5:]]) if messages else ""
 
-    if any(k in text for k in ["no effect", "did nothing", "still getting bitten", "didn’t help", "didn't help"]):
-        return RouteDecision(intent="product_no_effect", routed_agent="defect", confidence=0.6)
+    system_prompt = INTENT_CLASSIFICATION_PROMPT
+    user_prompt = (
+        "Latest user message:\n" + latest_user + "\n\n" +
+        "Recent conversation snippet (may be empty):\n" + history_snippet
+    )
 
-    if "refund" in text:
-        return RouteDecision(intent="refund_request", routed_agent="defect", confidence=0.6)
+    try:
+        resp = await openai.ChatCompletion.acreate(
+            model="gpt-4o-mini",
+            temperature=0.0,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+    except Exception:
+        # On any API error, fall back to WISMO so the request still flows.
+        return RouteDecision(
+            intent="Shipping Delay – Neutral Status Check",
+            routed_agent="wismo",
+            confidence=0.0,
+        )
 
-    if any(k in text for k in ["cancel", "change address", "update address", "modify order"]):
-        return RouteDecision(intent="order_modification", routed_agent="subscription", confidence=0.6)
+    raw = resp.choices[0].message["content"]  # type: ignore[index]
+    try:
+        data: Dict[str, Any] = json.loads(raw)
+    except Exception:
+        # If the model did not return valid JSON, fall back safely.
+        return RouteDecision(
+            intent="Shipping Delay – Neutral Status Check",
+            routed_agent="wismo",
+            confidence=0.0,
+        )
 
-    if any(k in text for k in ["subscription", "charge", "billed", "pause my monthly"]):
-        return RouteDecision(intent="subscription_issue", routed_agent="subscription", confidence=0.6)
+    intent = data.get("intent") or "Shipping Delay – Neutral Status Check"
+    routed_agent = data.get("routed_agent") or "wismo"
+    confidence = float(data.get("confidence") or 0.0)
 
-    if any(k in text for k in ["discount", "promo code", "coupon", "WELCOME10", "loyalty points"]):
-        return RouteDecision(intent="discount_problem", routed_agent="subscription", confidence=0.6)
-
-    if any(k in text for k in ["thank you", "love", "amazing", "saved our trip", "kids love"]):
-        return RouteDecision(intent="positive_feedback", routed_agent="wismo", confidence=0.5)
-
-    # Default to shipping so the main vertical slice is always testable.
-    return RouteDecision(intent="shipping_delay", routed_agent="wismo", confidence=0.3)
+    return RouteDecision(intent=intent, routed_agent=routed_agent, confidence=confidence)
 
 
 async def route(state: AgentState) -> AgentState:
