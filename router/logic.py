@@ -9,9 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List
 import json
-import os
 
-from dotenv import load_dotenv
 import openai
 
 from core.state import AgentState, Message
@@ -33,10 +31,9 @@ async def classify_intent(state: AgentState) -> RouteDecision:
     types and map it to a specialist agent.
     """
 
-    # NOTE: This assumes `OPENAI_API_KEY` is set in the environment.
-    # Load environment from an existing .env file (project root).
-    load_dotenv()
-    api_key = os.getenv("OPENAI_API_KEY")
+    # NOTE: This assumes `openai.api_key` has already been configured
+    # at the application boundary (e.g., in `api/server.py`).
+    api_key = getattr(openai, "api_key", None)
     if not api_key:
         # Fail closed: if there is no API key, default to shipping/WISMO
         # so the rest of the pipeline still works in local dev.

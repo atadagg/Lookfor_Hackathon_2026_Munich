@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from typing import Any, Dict
+import os
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel
+import openai
 
 from core.state import AgentState, Message
 from core.database import Checkpointer
@@ -14,6 +17,12 @@ from main import get_agent_registry
 
 
 app = FastAPI(title="Lookfor Hackathon Support API")
+
+# Load environment and configure OpenAI at the boundary of the app.
+load_dotenv()
+openai_api_key = os.getenv("OPENAI_API_KEY")
+if openai_api_key:
+    openai.api_key = openai_api_key
 
 
 class ChatRequest(BaseModel):
