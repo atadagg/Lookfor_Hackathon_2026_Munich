@@ -136,6 +136,45 @@ async def chat(req: ChatRequest) -> ChatResponse:
     # 1. Route to the right specialist
     state = await route(state)
 
+    # If routing has already escalated the thread (e.g. LLM error), do
+    # not invoke any specialist agents. Persist state and return the
+    # escalated snapshot to the caller.
+    if state.get("is_escalated"):
+        checkpointer.save_state(req.conversation_id, state)
+
+        assistant_messages = [m for m in state.get("messages", []) if m.get("role") == "assistant"]
+        if assistant_messages:
+            last_assistant = assistant_messages[-1]
+            checkpointer.save_message(
+                req.conversation_id,
+                role="assistant",
+                content=last_assistant.get("content", ""),
+                direction="outbound",
+            )
+
+        internal = state.get("internal_data", {}) or {}
+        tool_traces = internal.get("tool_traces") or []
+        escalation_summary = internal.get("escalation_summary")
+
+        last_assistant_message = last_assistant.get("content", "") if assistant_messages else None
+
+        return ChatResponse(
+            conversation_id=state.conversation_id,
+            agent="escalated",
+            state={
+                "intent": state.get("intent"),
+                "routed_agent": state.get("routed_agent"),
+                "current_workflow": state.get("current_workflow"),
+                "workflow_step": state.get("workflow_step"),
+                "is_escalated": state.get("is_escalated", False),
+                "escalation_summary": escalation_summary,
+                "last_assistant_message": last_assistant_message,
+                "internal_data": {
+                    "tool_traces": tool_traces,
+                },
+            },
+        )
+
     # 2. Dispatch to the specialist agent
     agents = get_agent_registry()
     routed_agent = state.get("routed_agent") or ""

@@ -11,27 +11,30 @@ from router.logic import classify_intent, RouteDecision
 from core.state import AgentState, Message
 
 
-async def _run_classify_without_api_key() -> RouteDecision:
+async def _run_classify_with_error() -> tuple[RouteDecision, AgentState]:
     # Minimal state with a single user message
     state = AgentState(messages=[Message(role="user", content="Where is my order?")])
     decision = await classify_intent(state)
-    return decision
+    return decision, state
 
 
-def test_classify_intent_falls_back_without_api_key(monkeypatch):
-    """When no OpenAI API key is configured, we fall back to WISMO.
+def test_classify_intent_escalates_on_llm_error(monkeypatch):
+    """If the LLM call fails, the thread should be escalated, not auto-routed."""
 
-    This ensures the router still behaves predictably in local/dev
-    environments or CI where no LLM credentials are present.
-    """
-
-    # Ensure there is no API key configured on the openai module.
     import openai
 
-    if hasattr(openai, "api_key"):
-        monkeypatch.delattr(openai, "api_key", raising=False)
+    async def fake_acreate(*args, **kwargs):
+        raise RuntimeError("LLM down")
 
-    decision = asyncio.run(_run_classify_without_api_key())
+    monkeypatch.setattr(openai.ChatCompletion, "acreate", fake_acreate, raising=True)
 
-    assert decision.routed_agent == "wismo"
-    assert decision.intent.startswith("Shipping Delay")
+    decision, state = asyncio.run(_run_classify_with_error())
+
+    assert decision.intent.startswith("Escalated")
+    assert "LLM" in decision.intent
+    assert decision.routed_agent == ""
+    assert state.get("is_escalated") is True
+    internal = state.get("internal_data") or {}
+    summary = internal.get("escalation_summary") or {}
+    assert summary.get("reason") == "llm_error"
+    assert "LLM down" in summary.get("details", {}).get("error", "")

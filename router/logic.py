@@ -7,12 +7,14 @@ preferred LLM + LangGraph stack later.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Dict, List
 import json
 
 import openai
 
 from core.state import AgentState, Message
+from schemas.internal import EscalationSummary
 from .prompt import INTENT_CLASSIFICATION_PROMPT
 
 
@@ -23,6 +25,46 @@ class RouteDecision:
     confidence: float
 
 
+def _escalate_due_to_llm_error(state: AgentState, error: str | None = None) -> RouteDecision:
+    """Mark the thread as escalated when routing LLMs fail.
+
+    This ensures we do not silently fall back to automation when the LLM
+    is unavailable or misbehaves. Instead, we set a clear escalation
+    summary and add a user-facing assistant message.
+    """
+
+    internal = state.get("internal_data") or {}
+    internal["escalation_summary"] = EscalationSummary(
+        reason="llm_error",
+        details={"error": error or "unknown"},
+    ).model_dump()
+    state["internal_data"] = internal
+
+    state["is_escalated"] = True
+    state["escalated_at"] = datetime.utcnow()
+
+    messages = list(state.get("messages", []))
+    messages.append(
+        Message(
+            role="assistant",
+            content=(
+                "I'm having trouble routing your request automatically right now. "
+                "To make sure you get the right support, I'm looping in Monica, "
+                "our Head of CS, who will take it from here."
+            ),
+        )
+    )
+    state["messages"] = messages
+    state["workflow_step"] = "escalated_llm_error"
+
+    # No specialist agent should be invoked after this point.
+    return RouteDecision(
+        intent="Escalated – LLM Error",
+        routed_agent="",
+        confidence=0.0,
+    )
+
+
 async def classify_intent(state: AgentState) -> RouteDecision:
     """Call OpenAI to classify the user's request.
 
@@ -30,20 +72,6 @@ async def classify_intent(state: AgentState) -> RouteDecision:
     `INTENT_CLASSIFICATION_PROMPT` to select one of the predefined issue
     types and map it to a specialist agent.
     """
-
-    # NOTE: This assumes `openai.api_key` has already been configured
-    # at the application boundary (e.g., in `api/server.py`).
-    api_key = getattr(openai, "api_key", None)
-    if not api_key:
-        # Fail closed: if there is no API key, default to shipping/WISMO
-        # so the rest of the pipeline still works in local dev.
-        return RouteDecision(
-            intent="Shipping Delay – Neutral Status Check",
-            routed_agent="wismo",
-            confidence=0.0,
-        )
-
-    openai.api_key = api_key
 
     messages: List[Message] = state.get("messages", [])  # type: ignore[assignment]
     # Use the last user message as the main query, but pass the recent
@@ -68,24 +96,18 @@ async def classify_intent(state: AgentState) -> RouteDecision:
                 {"role": "user", "content": user_prompt},
             ],
         )
-    except Exception:
-        # On any API error, fall back to WISMO so the request still flows.
-        return RouteDecision(
-            intent="Shipping Delay – Neutral Status Check",
-            routed_agent="wismo",
-            confidence=0.0,
-        )
+    except Exception as exc:
+        # Any LLM error should escalate the thread rather than falling
+        # back silently to automation.
+        return _escalate_due_to_llm_error(state, str(exc))
 
     raw = resp.choices[0].message["content"]  # type: ignore[index]
     try:
         data: Dict[str, Any] = json.loads(raw)
-    except Exception:
-        # If the model did not return valid JSON, fall back safely.
-        return RouteDecision(
-            intent="Shipping Delay – Neutral Status Check",
-            routed_agent="wismo",
-            confidence=0.0,
-        )
+    except Exception as exc:
+        # If the model did not return valid JSON, escalate rather than
+        # guessing a route.
+        return _escalate_due_to_llm_error(state, f"invalid_json: {exc}")
 
     intent = data.get("intent") or "Shipping Delay – Neutral Status Check"
     routed_agent = data.get("routed_agent") or "wismo"
