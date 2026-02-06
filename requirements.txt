@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pydantic
+
+# You can add LangGraph + LLM SDKs here during the hackathon, e.g.:
+# langgraph
+# openai
