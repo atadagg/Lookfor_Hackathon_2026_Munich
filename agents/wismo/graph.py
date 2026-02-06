@@ -6,7 +6,7 @@ minimal callable to keep the surface area small.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from core.base_agent import BaseAgent
 from core.state import AgentState
@@ -23,7 +23,7 @@ class WismoAgent(BaseAgent):
     def __init__(self) -> None:
         super().__init__(name="wismo")
         # Lazily compiled graph application.
-        self._app: Any | None = None
+        self._app: Optional[Any] = None
 
     def build_graph(self) -> Any:
         """Return (and cache) the internal graph / workflow object."""

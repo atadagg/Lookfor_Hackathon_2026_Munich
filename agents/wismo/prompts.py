@@ -5,6 +5,7 @@ that branching here or inside the graph itself.
 """
 
 from datetime import datetime
+from typing import Optional
 
 
 def wismo_system_prompt() -> str:
@@ -14,7 +15,7 @@ def wismo_system_prompt() -> str:
     )
 
 
-def current_wismo_policy_prompt(now: datetime | None = None) -> str:
+def current_wismo_policy_prompt(now: Optional[datetime] = None) -> str:
     """Return the policy text depending on day-of-week.
 
     This is a thin helper so you can later swap in PDF / RAG logic.

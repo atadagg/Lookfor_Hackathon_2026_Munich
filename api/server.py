@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 import os
 
 from dotenv import load_dotenv
@@ -47,11 +47,11 @@ class ChatResponse(BaseModel):
 class ThreadSnapshot(BaseModel):
     conversation_id: str
     status: str
-    current_workflow: str | None = None
-    workflow_step: str | None = None
+    current_workflow: Optional[str] = None
+    workflow_step: Optional[str] = None
     is_escalated: bool
-    escalated_at: str | None = None
-    messages: list[Dict[str, Any]]
+    escalated_at: Optional[str] = None
+    messages: List[Dict[str, Any]]
 
 
 # Single shared checkpointer instance.
