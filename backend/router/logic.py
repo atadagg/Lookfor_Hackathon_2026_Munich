@@ -7,7 +7,7 @@ classification to one of the registered specialist agent names.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import json
 import os
@@ -61,7 +61,7 @@ def _escalate_due_to_llm_error(
     state["internal_data"] = internal
 
     state["is_escalated"] = True
-    state["escalated_at"] = datetime.utcnow()
+    state["escalated_at"] = datetime.now(timezone.utc)
 
     messages = list(state.get("messages", []))
     messages.append(

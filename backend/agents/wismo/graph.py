@@ -23,7 +23,7 @@ ourselves).
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from langgraph.graph import END, StateGraph
@@ -98,7 +98,7 @@ async def node_check_order_status(state: AgentState) -> dict:
                 )
                 return {
                     "is_escalated": True,
-                    "escalated_at": datetime.utcnow(),
+                    "escalated_at": datetime.now(timezone.utc),
                     "internal_data": internal,
                     "messages": list(state.get("messages", [])) + [new_msg],
                     "workflow_step": "escalated_no_order_id",
@@ -144,7 +144,7 @@ async def node_check_order_status(state: AgentState) -> dict:
             )
             return {
                 "is_escalated": True,
-                "escalated_at": datetime.utcnow(),
+                "escalated_at": datetime.now(timezone.utc),
                 "internal_data": internal,
                 "messages": list(state.get("messages", [])) + [new_msg],
                 "workflow_step": "escalated_tool_error",
@@ -175,7 +175,7 @@ async def node_check_order_status(state: AgentState) -> dict:
         )
         return {
             "is_escalated": True,
-            "escalated_at": datetime.utcnow(),
+            "escalated_at": datetime.now(timezone.utc),
             "internal_data": internal,
             "messages": list(state.get("messages", [])) + [new_msg],
             "workflow_step": "escalated_missing_email",
@@ -207,7 +207,7 @@ async def node_check_order_status(state: AgentState) -> dict:
         )
         return {
             "is_escalated": True,
-            "escalated_at": datetime.utcnow(),
+            "escalated_at": datetime.now(timezone.utc),
             "internal_data": internal,
             "messages": list(state.get("messages", [])) + [new_msg],
             "workflow_step": "escalated_tool_error",
@@ -288,7 +288,7 @@ async def node_decide_wait_or_escalate(state: AgentState) -> dict:
         )
         return {
             "is_escalated": True,
-            "escalated_at": datetime.utcnow(),
+            "escalated_at": datetime.now(timezone.utc),
             "internal_data": internal,
             "messages": list(state.get("messages", [])) + [new_msg],
             "workflow_step": "escalated_missed_promise",

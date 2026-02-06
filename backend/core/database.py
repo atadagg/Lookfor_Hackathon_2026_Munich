@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 try:  # LangGraph optional import so tests don't explode without it
@@ -30,7 +30,7 @@ def _utc_now_iso() -> str:
     """Return a simple UTC timestamp string."""
 
     # Example: "2026-02-06T12:34:56.789123Z"
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 @dataclass
