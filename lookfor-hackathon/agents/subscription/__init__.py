@@ -1,1 +1,0 @@
-"""Agent 8: Subscription logic (skip, discount, cancel)."""
