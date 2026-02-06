@@ -5,5 +5,9 @@ pydantic
 # Graph / workflow engine
 langgraph
 
-# You can add LLM SDKs here during the hackathon, e.g.:
-# openai
+# LLM client
+openai
+python-dotenv
+
+# You can add other LLM SDKs here during the hackathon, e.g.:
+# anthropic
