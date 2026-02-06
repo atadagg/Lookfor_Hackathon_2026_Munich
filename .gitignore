@@ -13,6 +13,8 @@ state.db
 # IDE
 .idea/
 .vscode/
+.cursor/
+.cursor/plans/
 *.swp
 *.swo
 
