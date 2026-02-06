@@ -188,7 +188,11 @@ class ConversationalAgent(BaseAgent):
                     executor = all_executors.get(fn_name)
                     if executor:
                         try:
-                            result = await executor(**fn_args)
+                            # Special handling for call_agent - needs state
+                            if fn_name == "call_agent":
+                                result = await executor(**fn_args, state=state)
+                            else:
+                                result = await executor(**fn_args)
                         except Exception as exc:
                             result = {"success": False, "error": str(exc)}
                     else:

@@ -1,11 +1,13 @@
-"""Simple agent-as-tool pattern.
+"""Agent-as-tool adapter for inter-agent collaboration.
 
-One tool: call_agent(agent_name, customer_message)
-- Runs the agent with the message
-- Returns what that agent would say/do
-- Calling agent incorporates into its response
+This tool allows agents to call other agents, enabling multi-agent collaboration.
+When a customer mentions multiple issues, one agent can call another to handle
+part of the request.
 
-That's it. Stupidly simple.
+Pattern matches other tools:
+- Executor function: call_agent()
+- Schema: SCHEMA_CALL_AGENT
+- Exported in EXECUTORS dict
 """
 
 from __future__ import annotations
@@ -19,9 +21,9 @@ from main import get_agent_registry
 async def call_agent(
     agent_name: str,
     customer_message: str,
-    current_state: AgentState,
+    state: AgentState | None = None,
 ) -> Dict[str, Any]:
-    """Call another agent as a tool.
+    """Call another specialist agent as a tool.
     
     This runs the agent with the given message and returns what it would
     say/do. The calling agent can then incorporate this into its response.
@@ -35,7 +37,7 @@ async def call_agent(
     Args:
         agent_name: Which agent to call (refund, subscription, etc.)
         customer_message: The message/question for that agent
-        current_state: Current conversation state
+        state: Current conversation state (passed by executor wrapper)
     
     Returns:
         {
@@ -54,13 +56,19 @@ async def call_agent(
             "error": f"Agent '{agent_name}' not found",
         }
     
+    if not state:
+        return {
+            "success": False,
+            "error": "State not provided to call_agent",
+        }
+    
     # Create a temporary state for the agent call
     # We're asking "what would you do?" not handling the real conversation
     temp_state: AgentState = {
-        "conversation_id": current_state.get("conversation_id", "agent_call"),
-        "user_id": current_state.get("user_id", ""),
+        "conversation_id": state.get("conversation_id", "agent_call"),
+        "user_id": state.get("user_id", ""),
         "channel": "internal_agent_call",
-        "customer_info": current_state.get("customer_info", {}),
+        "customer_info": state.get("customer_info", {}),
         "messages": [
             {
                 "role": "user",
@@ -98,8 +106,7 @@ async def call_agent(
         }
 
 
-# Tool schema for LLM function calling
-CALL_AGENT_SCHEMA = {
+SCHEMA_CALL_AGENT = {
     "type": "function",
     "function": {
         "name": "call_agent",
@@ -128,4 +135,9 @@ CALL_AGENT_SCHEMA = {
 }
 
 
-__all__ = ["call_agent", "CALL_AGENT_SCHEMA"]
+EXECUTORS = {
+    "call_agent": call_agent,
+}
+
+
+__all__ = ["call_agent", "SCHEMA_CALL_AGENT", "EXECUTORS"]
