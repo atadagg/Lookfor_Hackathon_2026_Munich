@@ -2,17 +2,19 @@
 """Test all agents with sample scenarios.
 
 Run with: python3 test_all_agents.py
-Requires backend server running on http://localhost:8000
+Requires backend server running (default: http://localhost:8000)
+Set BACKEND_URL environment variable to override.
 """
 
 import asyncio
 import json
+import os
 from typing import Dict, Any
 
 import httpx
 
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
 
 
 async def test_agent(client: httpx.AsyncClient, scenario: Dict[str, Any]) -> None:
@@ -303,8 +305,9 @@ async def main():
             resp = await client.get(f"{BASE_URL}/health", timeout=5.0)
             print(f"Server health: {resp.status_code}")
         except Exception as e:
-            print(f"ERROR: Server not responding. Make sure backend is running on {BASE_URL}")
-            print(f"Start with: cd backend && uvicorn api.server:app --host 0.0.0.0 --port 8000")
+            print(f"ERROR: Server not responding at {BASE_URL}")
+            print(f"Local: cd backend && uvicorn api.server:app --host 0.0.0.0 --port 8000")
+            print(f"Or set BACKEND_URL env var: export BACKEND_URL=https://your-api.com")
             return
         
         # Run all scenarios

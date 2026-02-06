@@ -57,6 +57,7 @@ async def node_create_code(state: AgentState) -> dict:
     if resp.success:
         code = resp.data.get("code", "")
         internal["discount_code"] = code
+        internal["code_created"] = True
         internal["decided_action"] = "code_created"
     else:
         internal["decided_action"] = "code_creation_failed"
@@ -122,6 +123,7 @@ async def node_generate_response(state: AgentState) -> dict:
     new_msg = Message(role="assistant", content=assistant_text)
     return {
         "messages": list(state.get("messages", [])) + [new_msg],
+        "last_assistant_message": assistant_text,
         "workflow_step": "responded",
     }
 
@@ -166,7 +168,7 @@ class DiscountAgent(BaseAgent):
         return self._app
 
     async def handle(self, state: AgentState) -> AgentState:
-        state["current_workflow"] = "discount"
+        state["current_workflow"] = "discount_code"
         app = self.build_graph()
         if hasattr(app, "ainvoke"):
             return await app.ainvoke(state)
