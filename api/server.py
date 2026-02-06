@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-import os
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel
-import openai
 
 from core.state import AgentState, Message
 from core.database import Checkpointer
@@ -18,11 +16,19 @@ from main import get_agent_registry
 
 app = FastAPI(title="Lookfor Hackathon Support API")
 
-# Load environment and configure OpenAI at the boundary of the app.
+# Load environment at the boundary of the app.
 load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if openai_api_key:
-    openai.api_key = openai_api_key
+
+
+# Cached agent registry — created once at module load, not per request.
+_agent_registry = None
+
+
+def _get_agents():
+    global _agent_registry
+    if _agent_registry is None:
+        _agent_registry = get_agent_registry()
+    return _agent_registry
 
 
 class ChatRequest(BaseModel):
@@ -156,7 +162,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
         tool_traces = internal.get("tool_traces") or []
         escalation_summary = internal.get("escalation_summary")
 
-        last_assistant_message = last_assistant.get("content", "") if assistant_messages else None
+        last_assistant_message = assistant_messages[-1].get("content", "") if assistant_messages else None
         conv_id = state.get("conversation_id", req.conversation_id)
 
         return ChatResponse(
@@ -177,7 +183,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
         )
 
     # 2. Dispatch to the specialist agent
-    agents = get_agent_registry()
+    agents = _get_agents()
     routed_agent = state.get("routed_agent") or ""
     agent = agents.get(routed_agent)
     if agent is None:
@@ -194,7 +200,29 @@ async def chat(req: ChatRequest) -> ChatResponse:
             },
         )
 
-    state = await agent.handle(state)
+    try:
+        state = await agent.handle(state)
+    except Exception as exc:
+        # Gracefully catch unhandled agent errors → escalate instead of 500
+        internal = state.get("internal_data") or {}
+        internal.setdefault("tool_traces", [])
+        internal["escalation_summary"] = {
+            "reason": "agent_error",
+            "details": {"error": str(exc), "agent": routed_agent},
+        }
+        state["internal_data"] = internal
+        state["is_escalated"] = True
+        state["workflow_step"] = "escalated_agent_error"
+        msgs = list(state.get("messages", []))
+        msgs.append({
+            "role": "assistant",
+            "content": (
+                "I ran into a technical issue processing your request. "
+                "To make sure you get the right support, I'm looping in "
+                "Monica, our Head of CS, who will take it from here."
+            ),
+        })
+        state["messages"] = msgs
 
     # Persist the updated macro state so future turns can resume from it.
     checkpointer.save_state(req.conversation_id, state)

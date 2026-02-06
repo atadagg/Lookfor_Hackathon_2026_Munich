@@ -38,7 +38,7 @@ SCHEMA_CREATE_CODE = {
     "type": "function",
     "function": {
         "name": "discount_create_code",
-        "description": "Create a one-time discount code for a specific customer. Default is 10%% off with 48-hour lifespan.",
+        "description": "Create a one-time discount code for a specific customer. Default is 10% off with 48-hour lifespan.",
         "parameters": {
             "type": "object",
             "properties": {

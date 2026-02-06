@@ -137,7 +137,19 @@ SCHEMA_UPDATE_SHIPPING_ADDRESS = {
             "type": "object",
             "properties": {
                 "orderId": {"type": "string", "description": "The order ID"},
-                "address": {"type": "object", "description": "New address object with street, city, state, zip, country"},
+                "address": {
+                    "type": "object",
+                    "description": "New shipping address",
+                    "properties": {
+                        "address1": {"type": "string", "description": "Street address line 1"},
+                        "address2": {"type": "string", "description": "Street address line 2 (optional)"},
+                        "city": {"type": "string", "description": "City"},
+                        "province": {"type": "string", "description": "State or province"},
+                        "zip": {"type": "string", "description": "Postal / ZIP code"},
+                        "country": {"type": "string", "description": "Country name or ISO code"},
+                    },
+                    "required": ["address1", "city", "zip", "country"],
+                },
             },
             "required": ["orderId", "address"],
         },

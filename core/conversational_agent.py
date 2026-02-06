@@ -16,7 +16,7 @@ supply a system prompt, tool schemas, and tool executor mappings.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from core.base_agent import BaseAgent
@@ -77,12 +77,16 @@ class ConversationalAgent(BaseAgent):
     """
 
     _system_prompt: str = ""
-    _tool_schemas: List[dict] = []
-    _tool_executors: Dict[str, ToolExecutor] = {}
     _max_rounds: int = 6
     _model: str = "gpt-4o-mini"
     _temperature: float = 0.3
     _workflow_name: str = ""
+
+    def __init__(self, *, name: str = "") -> None:
+        super().__init__(name=name)
+        # Instance-level copies to avoid mutable class-attribute sharing
+        self._tool_schemas: List[dict] = []
+        self._tool_executors: Dict[str, ToolExecutor] = {}
 
     def build_graph(self) -> Any:
         return None  # conversational agents don't use LangGraph
@@ -139,6 +143,17 @@ class ConversationalAgent(BaseAgent):
                     summary="LLM call failed: %s" % exc,
                 )
 
+            if not resp.choices:
+                return self._escalate_state(
+                    state, messages_history, internal,
+                    reason="llm_error",
+                    customer_msg=(
+                        "I ran into a technical issue. To make sure you get "
+                        "the right support, I'm looping in Monica, our Head "
+                        "of CS, who will take it from here."
+                    ),
+                    summary="LLM returned empty choices",
+                )
             choice = resp.choices[0]
             assistant_msg = choice.message
 
@@ -212,7 +227,11 @@ class ConversationalAgent(BaseAgent):
     # ── helpers ─────────────────────────────────────────────────────
 
     def _build_customer_context(self, customer: dict, state: AgentState) -> str:
-        parts: List[str] = []
+        today = date.today()
+        day_name = today.strftime("%A")  # e.g. "Friday"
+        parts: List[str] = [
+            "Today's date: %s (%s)" % (today.isoformat(), day_name),
+        ]
         if customer.get("first_name"):
             parts.append("First name: %s" % customer["first_name"])
         if customer.get("last_name"):
@@ -235,7 +254,7 @@ class ConversationalAgent(BaseAgent):
     ) -> AgentState:
         """Set escalation flags and return the state."""
         state["is_escalated"] = True
-        state["escalated_at"] = datetime.utcnow()
+        state["escalated_at"] = datetime.now(timezone.utc)
         internal["escalation_summary"] = {
             "reason": reason,
             "details": {"internal_summary": summary} if summary else {},
