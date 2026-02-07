@@ -307,8 +307,9 @@ export function ShowcaseSidebar({ onClose, onExampleSelected }: ShowcaseSidebarP
       </div>
 
       {/* Content */}
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-2">
+      <div className="flex-1 overflow-y-auto">
+        <ScrollArea className="h-full">
+          <div className="p-4 space-y-2">
           {loading ? (
             <div className="text-center py-8 text-sm text-muted-foreground">Loading tickets...</div>
           ) : (
@@ -385,8 +386,9 @@ export function ShowcaseSidebar({ onClose, onExampleSelected }: ShowcaseSidebarP
               );
             })
           )}
-        </div>
-      </ScrollArea>
+          </div>
+        </ScrollArea>
+      </div>
 
       {/* Selected Ticket Detail */}
       {selectedTicket && (

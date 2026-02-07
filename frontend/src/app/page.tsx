@@ -94,7 +94,11 @@ export default function Home() {
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={() => setShowPlayground(true)}
+              onClick={() => {
+                setShowMASBehavior(false);
+                setShowShowcase(false);
+                setShowPlayground(true);
+              }}
               className="flex-1 h-8 px-2 text-xs border-purple-200 bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 dark:from-purple-950/20 dark:to-blue-950/20 dark:hover:from-purple-950/30 dark:hover:to-blue-950/30 dark:border-purple-800 transition-all"
               title="Random Ticket Testing"
             >
@@ -105,7 +109,11 @@ export default function Home() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => setShowMASBehavior(true)}
+              onClick={() => {
+                setShowPlayground(false);
+                setShowShowcase(false);
+                setShowMASBehavior(true);
+              }}
               className="flex-1 h-8 px-2 text-xs border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 dark:from-amber-950/20 dark:to-orange-950/20 dark:hover:from-amber-950/30 dark:hover:to-orange-950/30 dark:border-amber-800 transition-all"
               title="Agent Behavior Configuration"
             >
@@ -116,7 +124,11 @@ export default function Home() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => setShowShowcase(true)}
+              onClick={() => {
+                setShowPlayground(false);
+                setShowMASBehavior(false);
+                setShowShowcase(true);
+              }}
               className="flex-1 h-8 px-2 text-xs border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 dark:from-emerald-950/20 dark:to-teal-950/20 dark:hover:from-emerald-950/30 dark:hover:to-teal-950/30 dark:border-emerald-800 transition-all"
               title="Hackathon Demo Scenarios"
             >
