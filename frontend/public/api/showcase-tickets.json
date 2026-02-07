@@ -1,0 +1,162 @@
+[
+  {
+    "conversationId": "<2a6b53ac5ee8@example.com>",
+    "customerId": "cust_8b7c460f",
+    "createdAt": "19-Jul-2025",
+    "conversationType": "email",
+    "subject": "Missing items from order NP9363178",
+    "conversation": "Customer's message: \"Hello,I am trying to determine if the three other products from my order have been dispatched, are still to be dispatched, or have been lost. Order no. NP9363178. I have received the Zen patch and the kids tick stickers.Kind regardsParker Wilson\""
+  },
+  {
+    "conversationId": "<26d3e1d38578@example.com>",
+    "customerId": "cust_b80233f7",
+    "createdAt": "19-Jul-2025",
+    "conversationType": "email",
+    "subject": "Wrong items received - Order NP6664669",
+    "conversation": "Customer's message: \"Hello, my order number is Order #NP6664669. My order was to include 2 packs for adults and i received all packs for kids. Also, the packs were the old version of buzzpatch. The packs barely had a scent as if they were dried out. They didn't work and i would like a refund please. Thank you\""
+  },
+  {
+    "conversationId": "<c733c6be852d@example.com>",
+    "customerId": "cust_4979a893",
+    "createdAt": "19-Jul-2025",
+    "conversationType": "email",
+    "subject": "Issue with Order NP1366949",
+    "conversation": "Customer's message: \"Ours fall off our clothing pretty easily. If they stayed on, they would do a better job.\""
+  },
+  {
+    "conversationId": "<b8ec4ea76a34@example.com>",
+    "customerId": "cust_b7d0014c",
+    "createdAt": "18-Jul-2025",
+    "conversationType": "email",
+    "subject": "Old version patches received - Order NP7412770",
+    "conversation": "Customer's message: \"I'm reaching out regarding my most recent order, Order# NP7412770. I have been using NATPAT for several years without any issues, but the MagicPatch Itch Relief Patches I received seem to be the old version and the packaging is different than what is advertised on the website. The ones I received state that there are 27 patches, while the website states there are 32 patches in each pack. The most glaring issue is the performance and staying power of the patches I received. They fall off almost immediately and are guaranteed gone after sleeping. Overall, I'm displeased with the patches I received and I would like to get them replaced with the new version that are advertised on the website.\""
+  },
+  {
+    "conversationId": "<1fc5fbc1fdd8@example.com>",
+    "customerId": "cust_b1f341ae",
+    "createdAt": "18-Jul-2025",
+    "conversationType": "email",
+    "subject": "Where is my order?",
+    "conversation": "Customer's message: \"Where is my order ? Order placed 2 weeks ago, no tracking update.\""
+  },
+  {
+    "conversationId": "<8d4f2a1c3b9e@example.com>",
+    "customerId": "cust_9c3d8a2b",
+    "createdAt": "17-Jul-2025",
+    "conversationType": "email",
+    "subject": "Request refund for defective product",
+    "conversation": "Customer's message: \"Hi, I received my order but the patches don't stick at all. I'd like a full refund please. Order NP8523147\""
+  },
+  {
+    "conversationId": "<5e7c9d2f8a1b@example.com>",
+    "customerId": "cust_4e2a7c9d",
+    "createdAt": "17-Jul-2025",
+    "conversationType": "email",
+    "subject": "Cancel my order",
+    "conversation": "Customer's message: \"I need to cancel order NP9012345. It hasn't shipped yet. Please process the cancellation immediately.\""
+  },
+  {
+    "conversationId": "<3f8b4e1d7c2a@example.com>",
+    "customerId": "cust_7d3f8b4e",
+    "createdAt": "16-Jul-2025",
+    "conversationType": "email",
+    "subject": "Pause my subscription",
+    "conversation": "Customer's message: \"Hi, can you pause my subscription for 2 months? I'm going on vacation and don't need deliveries. Thanks!\""
+  },
+  {
+    "conversationId": "<9a2c5e8f1d3b@example.com>",
+    "customerId": "cust_5e8a2c9f",
+    "createdAt": "16-Jul-2025",
+    "conversationType": "email",
+    "subject": "Discount code not working",
+    "conversation": "Customer's message: \"I'm trying to use discount code SAVE20 but it says it's invalid. Can you help?\""
+  },
+  {
+    "conversationId": "<7d1f3b5e9c2a@example.com>",
+    "customerId": "cust_3b7d1f5e",
+    "createdAt": "15-Jul-2025",
+    "conversationType": "email",
+    "subject": "Love your products!",
+    "conversation": "Customer's message: \"Just wanted to say the BuzzPatches are amazing! My kids love them and they actually work. Do you have a referral program?\""
+  },
+  {
+    "conversationId": "<4c8e2a6d9f1b@example.com>",
+    "customerId": "cust_2a4c8e6d",
+    "createdAt": "15-Jul-2025",
+    "conversationType": "email",
+    "subject": "Tracking shows delivered but not received",
+    "conversation": "Customer's message: \"The tracking says my order was delivered 3 days ago but I never received it. Order NP7845123. Can you investigate?\""
+  },
+  {
+    "conversationId": "<1e9d3f7c5a2b@example.com>",
+    "customerId": "cust_9d1e3f7c",
+    "createdAt": "14-Jul-2025",
+    "conversationType": "email",
+    "subject": "Change shipping address",
+    "conversation": "Customer's message: \"I need to change the shipping address for order NP6723189. I'm moving and need it sent to my new address. Can you update it?\""
+  },
+  {
+    "conversationId": "<8f2b4e1a6d3c@example.com>",
+    "customerId": "cust_4e8f2b1a",
+    "createdAt": "14-Jul-2025",
+    "conversationType": "email",
+    "subject": "Product doesn't work as advertised",
+    "conversation": "Customer's message: \"The mosquito patches don't work at all. I've been bitten multiple times while wearing them. Very disappointed.\""
+  },
+  {
+    "conversationId": "<5a7c3e9d2f1b@example.com>",
+    "customerId": "cust_7c5a3e9d",
+    "createdAt": "13-Jul-2025",
+    "conversationType": "email",
+    "subject": "Cancel subscription",
+    "conversation": "Customer's message: \"Please cancel my subscription. It's not working for me anymore.\""
+  },
+  {
+    "conversationId": "<2d6f8e1c4a3b@example.com>",
+    "customerId": "cust_6f2d8e1c",
+    "createdAt": "13-Jul-2025",
+    "conversationType": "email",
+    "subject": "Missing item from package",
+    "conversation": "Customer's message: \"My package arrived but it's missing 2 items. I only got the stickers but not the patches. Order NP9363178\""
+  },
+  {
+    "conversationId": "<9e3a7d2f5c1b@example.com>",
+    "customerId": "cust_3a9e7d2f",
+    "createdAt": "12-Jul-2025",
+    "conversationType": "email",
+    "subject": "Refund as store credit",
+    "conversation": "Customer's message: \"Can I get store credit instead of a refund? I want to try different products. Order NP4567891\""
+  },
+  {
+    "conversationId": "<7f1e4c8d2a6b@example.com>",
+    "customerId": "cust_1e7f4c8d",
+    "createdAt": "12-Jul-2025",
+    "conversationType": "email",
+    "subject": "Expired discount code",
+    "conversation": "Customer's message: \"My discount code expired yesterday. Can I get a new one? I was about to place an order.\""
+  },
+  {
+    "conversationId": "<4b8d2e7f9c1a@example.com>",
+    "customerId": "cust_8d4b2e7f",
+    "createdAt": "11-Jul-2025",
+    "conversationType": "email",
+    "subject": "Skip next subscription order",
+    "conversation": "Customer's message: \"Can I skip next month's delivery? I still have plenty left.\""
+  },
+  {
+    "conversationId": "<6c2f9e3d7a1b@example.com>",
+    "customerId": "cust_2f6c9e3d",
+    "createdAt": "11-Jul-2025",
+    "conversationType": "email",
+    "subject": "Order delayed over 2 weeks",
+    "conversation": "Customer's message: \"My order #NP3456789 says it was shipped 10 days ago but still not here. What's going on?\""
+  },
+  {
+    "conversationId": "<3e7a5d9f2c1b@example.com>",
+    "customerId": "cust_7a3e5d9f",
+    "createdAt": "10-Jul-2025",
+    "conversationType": "email",
+    "subject": "Wrong color received",
+    "conversation": "Customer's message: \"I ordered blue patches but received pink ones. Can you send the correct color? Order NP7891234\""
+  }
+]

@@ -7,7 +7,7 @@ import { PlaygroundSidebar } from "@/components/playground-sidebar";
 import { MASBehaviorSidebar } from "@/components/mas-behavior-sidebar";
 import { ShowcaseSidebar } from "@/components/showcase-sidebar";
 import { fetchThreads, ThreadSummary } from "@/lib/api";
-import { Gamepad2, SlidersHorizontal, Presentation } from "lucide-react";
+import { Gamepad2, SlidersHorizontal, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Home() {
@@ -59,24 +59,14 @@ export default function Home() {
       <div className="w-[360px] shrink-0 flex flex-col border-r">
         {/* Header */}
         <div className="px-4 py-3 border-b">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-2.5">
             <h1 className="text-sm font-bold tracking-tight">Lookfor Digital Support</h1>
             <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full font-medium">
               {threads.length} thread{threads.length !== 1 ? "s" : ""}
             </span>
           </div>
           
-          {/* Showcase Button - Main CTA */}
-          <Button
-            onClick={() => setShowShowcase(true)}
-            className="w-full h-11 mb-3 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 hover:from-blue-600 hover:via-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all"
-          >
-            <Presentation className="w-5 h-5 mr-2" />
-            <span className="font-semibold">Hackathon Showcase</span>
-            <span className="ml-auto text-xs opacity-90">8 Use Cases →</span>
-          </Button>
-          
-          {/* Search (Standalone Row) */}
+          {/* Search */}
           <div className="relative mb-2.5">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"
@@ -122,6 +112,17 @@ export default function Home() {
               <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5 text-amber-600 dark:text-amber-400" />
               <span className="bg-gradient-to-r from-amber-600 to-orange-600 dark:from-amber-400 dark:to-orange-400 bg-clip-text text-transparent font-medium">
                 Behavior
+              </span>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowShowcase(true)}
+              className="flex-1 h-8 px-2 text-xs border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 dark:from-emerald-950/20 dark:to-teal-950/20 dark:hover:from-emerald-950/30 dark:hover:to-teal-950/30 dark:border-emerald-800 transition-all"
+              title="Hackathon Demo Scenarios"
+            >
+              <Award className="w-3.5 h-3.5 mr-1.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent font-medium">
+                Showcase
               </span>
             </Button>
           </div>
