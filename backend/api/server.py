@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from core.state import AgentState, Message
 from core.database import Checkpointer
+from core.storage import get_attachment_stream, upload_attachment
 from router.logic import route
 from main import get_agent_registry
 from utils.minio_client import upload_photo, download_photo
@@ -42,6 +45,14 @@ def _get_agents():
     return _agent_registry
 
 
+class AttachmentInput(BaseModel):
+    """Base64-encoded image attachment from email/webhook."""
+
+    filename: Optional[str] = None
+    content_type: str = "image/jpeg"
+    data: str  # base64-encoded bytes
+
+
 class ChatRequest(BaseModel):
     conversation_id: str
     user_id: str
@@ -53,8 +64,10 @@ class ChatRequest(BaseModel):
     last_name: str
     shopify_customer_id: str
     message: str
-    # Photo attachments (MinIO URLs for UC2: Wrong Item)
+    # Photo URLs (MinIO URLs for UC2: Wrong Item, e.g. from hackathon platform)
     photo_urls: Optional[List[str]] = None
+    # Base64-encoded image attachments (from email with images)
+    attachments: Optional[List[AttachmentInput]] = None
 
 
 class ChatResponse(BaseModel):
@@ -90,12 +103,31 @@ async def chat(req: ChatRequest) -> ChatResponse:
        state + assistant reply.
     """
 
-    # 1) Log inbound user message (with duplicate detection).
+    # 1) Process attachments: upload to MinIO (or local fallback) and collect refs
+    attachments_meta: List[Dict[str, Any]] = []
+    if req.attachments:
+        for att in req.attachments:
+            try:
+                raw = base64.b64decode(att.data)
+            except Exception:
+                continue
+            meta = upload_attachment(
+                req.conversation_id,
+                raw,
+                att.content_type,
+                att.filename,
+            )
+            if meta:
+                attachments_meta.append(meta)
+    attachments_json_str = json.dumps(attachments_meta) if attachments_meta else None
+
+    # 2) Log inbound user message (with duplicate detection).
     was_new = checkpointer.save_message(
         req.conversation_id,
         role="user",
         content=req.message,
         direction="inbound",
+        attachments_json=attachments_json_str,
     )
 
     if not was_new:
@@ -311,12 +343,50 @@ async def chat(req: ChatRequest) -> ChatResponse:
     )
 
 
+def _add_attachment_urls(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Add 'url' to each attachment for frontend display."""
+    out = []
+    for msg in messages:
+        m = dict(msg)
+        atts = m.get("attachments") or []
+        enriched = []
+        for a in atts:
+            obj_key = a.get("object_key")
+            if obj_key:
+                b64 = base64.urlsafe_b64encode(obj_key.encode("utf-8")).decode("ascii").rstrip("=")
+                enriched.append({**a, "url": f"/attachment?key={b64}"})
+            else:
+                enriched.append(a)
+        m["attachments"] = enriched
+        out.append(m)
+    return out
+
+
+@app.get("/attachment")
+async def get_attachment(key: str):
+    """Stream an attachment by its base64-encoded object_key. Used by frontend to display images."""
+    try:
+        # Decode key (padding may have been stripped)
+        pad = 4 - len(key) % 4
+        if pad != 4:
+            key += "=" * pad
+        object_key = base64.urlsafe_b64decode(key).decode("utf-8")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid attachment key")
+    result = get_attachment_stream(object_key)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    data, content_type = result
+    return Response(content=data, media_type=content_type)
+
+
 @app.get("/thread/{conversation_id}", response_model=ThreadSnapshot)
 async def get_thread(conversation_id: str) -> ThreadSnapshot:
     """Read-only endpoint to inspect a thread's status and messages."""
 
     thread = checkpointer.get_thread(conversation_id)
     messages = checkpointer.get_messages(conversation_id)
+    messages = _add_attachment_urls(messages)
 
     if thread is None:
         # Return an empty shell so evaluators can still hit the endpoint safely.

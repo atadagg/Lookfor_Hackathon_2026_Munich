@@ -11,6 +11,9 @@ venv/
 # SQLite runtime database
 state.db
 
+# Local attachment uploads (when MinIO not configured)
+data/
+
 # Node / Frontend
 node_modules/
 .next/

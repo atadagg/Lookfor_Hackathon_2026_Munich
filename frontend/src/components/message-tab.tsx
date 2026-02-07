@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ThreadDetail } from "@/lib/api";
+import { API_URL, ThreadDetail } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
@@ -128,6 +128,36 @@ export function MessageTab({ thread, customerName }: MessageTabProps) {
                 >
                   {renderContent(msg.content, isUser)}
                 </div>
+                {msg.attachments && msg.attachments.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {msg.attachments.map((att, j) => {
+                      const src = att.url.startsWith("http") ? att.url : `${API_URL}${att.url}`;
+                      const isImage = (att.content_type || "").startsWith("image/");
+                      if (isImage) {
+                        return (
+                          <a key={j} href={src} target="_blank" rel="noopener noreferrer" className="block">
+                            <img
+                              src={src}
+                              alt={att.filename || "Attachment"}
+                              className="max-h-48 rounded-lg border object-contain hover:opacity-90"
+                            />
+                          </a>
+                        );
+                      }
+                      return (
+                        <a
+                          key={j}
+                          href={src}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs underline text-muted-foreground hover:text-foreground"
+                        >
+                          {att.filename || "View attachment"}
+                        </a>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Agent avatar */}

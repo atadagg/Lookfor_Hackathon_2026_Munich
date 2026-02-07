@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface ThreadSummary {
   conversation_id: string;
@@ -15,11 +15,18 @@ export interface ThreadSummary {
   updated_at: string;
 }
 
+export interface MessageAttachment {
+  url: string;
+  filename?: string;
+  content_type?: string;
+}
+
 export interface ThreadMessage {
   role: string;
   content: string;
   direction: string;
   created_at: string;
+  attachments?: MessageAttachment[];
 }
 
 export interface ThreadDetail {
@@ -85,6 +92,12 @@ export async function fetchThreadState(id: string): Promise<ThreadState> {
   return res.json();
 }
 
+export interface AttachmentInput {
+  filename?: string;
+  content_type?: string;
+  data: string; // base64-encoded
+}
+
 export interface SendMessagePayload {
   conversation_id: string;
   user_id: string;
@@ -94,6 +107,7 @@ export interface SendMessagePayload {
   last_name: string;
   shopify_customer_id: string;
   message: string;
+  attachments?: AttachmentInput[];
 }
 
 export async function sendMessage(payload: SendMessagePayload) {

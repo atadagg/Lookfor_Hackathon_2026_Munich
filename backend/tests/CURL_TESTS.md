@@ -36,6 +36,32 @@ uvicorn api.server:app --reload
 
 ---
 
+## Image Attachments (MinIO / Local)
+
+Chat requests accept an optional `attachments` array with base64-encoded images:
+
+```json
+{
+  "attachments": [
+    {
+      "filename": "photo.jpg",
+      "content_type": "image/jpeg",
+      "data": "<base64-encoded-bytes>"
+    }
+  ]
+}
+```
+
+Example with a 1x1 PNG (replace `PHOTO_B64` with real image data):
+```bash
+PHOTO_B64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+curl -X POST "$BACKEND_URL/chat" -H "Content-Type: application/json" -d "{\"conversation_id\":\"photo-test-1\",\"user_id\":\"u1\",\"channel\":\"email\",\"customer_email\":\"test@example.com\",\"first_name\":\"T\",\"last_name\":\"U\",\"shopify_customer_id\":\"c1\",\"message\":\"See attached photo\",\"attachments\":[{\"filename\":\"img.png\",\"content_type\":\"image/png\",\"data\":\"$PHOTO_B64\"}]}" | jq
+```
+
+Images are stored in MinIO (when credentials are set) or locally in `data/uploads/`. Fetch thread to see attachments; frontend displays them inline.
+
+---
+
 ## UC1: WISMO (Shipping Delay - Where Is My Order)
 
 ### Scenario 1: Simple status check (in transit)
@@ -185,7 +211,7 @@ curl -X POST "$BACKEND_URL/chat" \
     "message": "Received the pet collar but the tick stickers are missing."
   }' | jq
 
-# Turn 2: Provide details with photo (MinIO URL from MINIO_URL env var)
+# Turn 2: Provide details with photo (use photo_urls with MINIO_URL, or attachments with base64 - see "Image Attachments" section)
 curl -X POST "$BACKEND_URL/chat" \
   -H "Content-Type: application/json" \
   -d '{

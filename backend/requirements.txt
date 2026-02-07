@@ -9,6 +9,9 @@ langsmith
 # HTTP client for tool adapters
 httpx
 
+# Object storage (MinIO / S3-compatible)
+minio
+
 # LLM client
 openai
 python-dotenv

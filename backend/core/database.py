@@ -122,10 +122,21 @@ class Checkpointer:
                 external_msg_id TEXT,
                 direction       TEXT NOT NULL,   -- inbound | outbound
 
+                attachments_json TEXT,           -- JSON array of {object_key, filename, content_type}
+
                 created_at      TEXT NOT NULL
             )
             """
         )
+
+        # Migration: add attachments_json if table existed before (SQLite has no IF NOT EXISTS for columns)
+        try:
+            cur.execute(
+                "ALTER TABLE messages ADD COLUMN attachments_json TEXT"
+            )
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
 
         self._conn.commit()
 
@@ -226,6 +237,7 @@ class Checkpointer:
         content: str,
         direction: str,
         external_msg_id: Optional[str] = None,
+        attachments_json: Optional[str] = None,
     ) -> bool:
         """Append a message row and bump `last_message_at` on the thread.
 
@@ -302,11 +314,12 @@ class Checkpointer:
                 content,
                 external_msg_id,
                 direction,
+                attachments_json,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (thread_id, role, content, external_msg_id, direction, now),
+            (thread_id, role, content, external_msg_id, direction, attachments_json or None, now),
         )
 
         self._conn.commit()
@@ -355,6 +368,7 @@ class Checkpointer:
                 m.role,
                 m.content,
                 m.direction,
+                m.attachments_json,
                 m.created_at
             FROM messages AS m
             JOIN threads AS t
@@ -365,15 +379,24 @@ class Checkpointer:
             (conversation_id,),
         )
         rows = cur.fetchall()
-        return [
-            {
+        result = []
+        for row in rows:
+            msg = {
                 "role": row["role"],
                 "content": row["content"],
                 "direction": row["direction"],
                 "created_at": row["created_at"],
             }
-            for row in rows
-        ]
+            att_raw = row["attachments_json"] if row["attachments_json"] is not None else None
+            if att_raw:
+                try:
+                    msg["attachments"] = json.loads(att_raw)
+                except (json.JSONDecodeError, TypeError):
+                    msg["attachments"] = []
+            else:
+                msg["attachments"] = []
+            result.append(msg)
+        return result
 
     def list_threads(self) -> list[Dict[str, Any]]:
         """Return all threads, newest first, with basic metadata."""
