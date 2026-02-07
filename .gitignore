@@ -1,5 +1,8 @@
 # Environment variables (API keys, secrets)
 .env
+.env.local
+.env.*.local
+backend/.env
 
 # Python
 __pycache__/
@@ -7,14 +10,21 @@ __pycache__/
 *.so
 .venv/
 venv/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # SQLite runtime database
-state.db
+*.db
+*.sqlite
+*.sqlite3
 
 # Node / Frontend
 node_modules/
 .next/
 out/
+build/
+dist/
 
 # IDE
 .idea/

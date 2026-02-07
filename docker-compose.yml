@@ -1,32 +1,36 @@
 services:
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: fidelio-backend
     ports:
       - "8000:8000"
-    env_file: 
+    env_file:
       - ./backend/.env
     environment:
       - PYTHONUNBUFFERED=1
     volumes:
+      # Named volume for SQLite state (survives rebuilds)
+      - backend-state:/app
+      # Named volume for uploaded photos / data
       - backend-data:/app/data
-      - ./backend/state.db:/app/state.db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 15s
     restart: unless-stopped
     networks:
       - fidelio-network
 
   frontend:
-    build: 
+    build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
     container_name: fidelio-frontend
     ports:
       - "3000:3000"
@@ -41,6 +45,8 @@ services:
       - fidelio-network
 
 volumes:
+  backend-state:
+    driver: local
   backend-data:
     driver: local
 
