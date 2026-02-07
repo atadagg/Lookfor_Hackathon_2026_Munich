@@ -10,7 +10,7 @@ git clone https://github.com/atadagg/Lookfor_Hackathon_2026_Munich.git
 cd Lookfor_Hackathon_2026_Munich
 
 # 2. Add your API keys to backend/.env
-cp .env.example backend/.env
+cp backend/.env.example backend/.env
 # Edit backend/.env and set OPENAI_API_KEY and API_URL
 
 # 3. Run everything with Docker
@@ -29,6 +29,7 @@ docker-compose up --build
 ├── backend/           # Python (FastAPI + LangGraph)
 │   ├── api/           # FastAPI server, /chat and /thread endpoints
 │   ├── agents/        # 8 specialist agents (WISMO, refund, etc.)
+│   ├── config/        # mas_behavior.yaml (policies, overrides)
 │   ├── core/          # State, database, LLM client, base agent classes
 │   ├── router/        # Intent classification / routing
 │   ├── schemas/       # Pydantic models
@@ -37,7 +38,7 @@ docker-compose up --build
 ├── frontend/          # Next.js + Shadcn UI dashboard
 │   └── src/
 │       ├── app/       # App router pages
-│       ├── components/# Mail-like UI components
+│       ├── components/    # Mail-like UI components
 │       └── lib/       # API client
 ├── docker-compose.yml # One-click orchestration
 └── README.md
@@ -186,6 +187,10 @@ An LLM-based intent classifier (`router/`) analyzes the customer message and rou
 
 13 Shopify tools + 5 Skio subscription tools, all conforming to the Hackathon Tooling Spec. Tools make HTTP POST calls to `{API_URL}/hackathon/*` endpoints. When `API_URL` is not set, agents use built-in mock responses for development.
 
+### MAS Behavior (Natural-Language Config)
+
+Update agent behavior in plain English—no YAML editing. Open the MAS Behavior sidebar in the dashboard and type instructions (e.g. "If a customer wants to update their order address, escalate instead of updating directly."). The system interprets and applies policies or behavior overrides.
+
 ### Escalation
 
 When the workflow manual requires escalation or the system cannot safely proceed:
@@ -264,5 +269,6 @@ npm run dev
 
 ## Documentation
 
+- See `DOCKER_SETUP.md` for Docker setup and troubleshooting
 - See `backend/docs/` for detailed documentation
 - API documentation available at http://localhost:8000/docs when running
