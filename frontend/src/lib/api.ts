@@ -43,6 +43,14 @@ export interface ToolTrace {
   name: string;
   inputs: Record<string, unknown>;
   output: Record<string, unknown>;
+  timestamp?: string;
+  duration_ms?: number;
+  metadata?: {
+    success?: boolean;
+    has_error?: boolean;
+    exception?: string;
+    [key: string]: unknown;
+  };
 }
 
 /** One turn in the conversation: which agent ran and its traces. */

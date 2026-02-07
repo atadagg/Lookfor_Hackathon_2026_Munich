@@ -23,6 +23,8 @@ docker-compose up --build
 
 ## Architecture
 
+### 📁 Project Structure
+
 ```
 ├── backend/           # Python (FastAPI + LangGraph)
 │   ├── api/           # FastAPI server, /chat and /thread endpoints
@@ -39,6 +41,128 @@ docker-compose up --build
 │       └── lib/       # API client
 ├── docker-compose.yml # One-click orchestration
 └── README.md
+```
+
+### 🔄 System Flow
+
+```mermaid
+flowchart TB
+    subgraph "Customer"
+        A[👤 Customer Email]
+    end
+    
+    subgraph "Frontend Dashboard"
+        B[📧 Next.js UI]
+    end
+    
+    subgraph "FastAPI Backend"
+        C[🔌 POST /chat]
+        D[(SQLite State DB)]
+        E{🔐 Already<br/>Escalated?}
+        F[📋 Return Escalation<br/>Message]
+        
+        subgraph "Router"
+            G[🤖 LLM Intent<br/>Classification]
+            H{Intent Type}
+        end
+        
+        subgraph "Specialist Agents"
+            I1[📦 WISMO Agent]
+            I2[❌ Wrong Item Agent]
+            I3[🔧 Product Issue Agent]
+            I4[💰 Refund Agent]
+            I5[✏️ Order Mod Agent]
+            I6[💬 Feedback Agent]
+            I7[🔄 Subscription Agent]
+            I8[🎟️ Discount Agent]
+        end
+        
+        subgraph "LangGraph Workflow"
+            J[📊 Agent State Machine]
+            K{Decision<br/>Point}
+            L[🛠️ Tool Execution]
+            M[📝 LLM Response<br/>Generation]
+        end
+        
+        subgraph "External APIs"
+            N[🛍️ Shopify API<br/>13 tools]
+            O[💳 Skio API<br/>5 tools]
+        end
+        
+        P[💾 Save State +<br/>Tool Traces]
+        Q[📤 JSON Response]
+    end
+    
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E -->|Yes| F
+    E -->|No| G
+    F --> Q
+    G --> H
+    
+    H -->|Shipping| I1
+    H -->|Wrong Item| I2
+    H -->|Product Issue| I3
+    H -->|Refund| I4
+    H -->|Order Mod| I5
+    H -->|Feedback| I6
+    H -->|Subscription| I7
+    H -->|Discount| I8
+    
+    I1 & I2 & I3 & I4 & I5 & I6 & I7 & I8 --> J
+    
+    J --> K
+    K -->|Need Data| L
+    K -->|Ready| M
+    L --> N & O
+    N & O --> L
+    L --> K
+    M --> P
+    P --> Q
+    Q --> B
+    B --> A
+    
+    style A fill:#e1f5ff
+    style B fill:#fff4e6
+    style G fill:#f3e5f5
+    style I1 fill:#e8f5e9
+    style I2 fill:#e8f5e9
+    style I3 fill:#e8f5e9
+    style I4 fill:#e8f5e9
+    style I5 fill:#e8f5e9
+    style I6 fill:#e8f5e9
+    style I7 fill:#e8f5e9
+    style I8 fill:#e8f5e9
+    style N fill:#ffe0b2
+    style O fill:#ffe0b2
+```
+
+### 🤖 Detailed Agent Flow
+
+```mermaid
+flowchart LR
+    subgraph "Agent Internal Flow"
+        A1[🎯 Check Order Status]
+        A2[📊 Internal Data]
+        A3{Status?}
+        A4[⏱️ Wait Promise]
+        A5[⚠️ Escalate]
+        A6[✅ Respond]
+        
+        A1 --> A2
+        A2 --> A3
+        A3 -->|Delayed| A4
+        A3 -->|Problem| A5
+        A3 -->|OK| A6
+    end
+    
+    style A1 fill:#bbdefb
+    style A2 fill:#c5e1a5
+    style A4 fill:#fff9c4
+    style A5 fill:#ffccbc
+    style A6 fill:#c8e6c9
 ```
 
 ### Agent System
@@ -69,12 +193,35 @@ When the workflow manual requires escalation or the system cannot safely proceed
 2. A structured `EscalationSummary` is generated (reason, context, recommended action)
 3. The thread is marked `is_escalated = true` and automation stops
 
-### Observability (Frontend Dashboard)
+### 🔍 Observability (LangChain-Style Dashboard)
 
-The Shadcn UI dashboard provides three views per conversation:
-- **Message** tab: Full email thread (customer + AI responses)
-- **Agent Trace** tab: Timeline of agent decisions, workflow steps, and tool calls
-- **Raw Logs** tab: Complete tool I/O and JSON state snapshot
+The frontend provides production-grade observability with real-time metrics:
+
+#### 📊 Execution Metrics Dashboard
+- Total tool calls with success rate visualization
+- Multi-agent turn tracking
+- Performance metrics (ms precision)
+- Status indicators (Active/Escalated)
+
+#### 📈 Performance Timeline
+- Tool execution duration charts
+- Relative performance comparison
+- Success/failure color coding
+- Total and average duration metrics
+
+#### 🔄 Execution Flow Graph
+- Step-by-step workflow visualization
+- LLM classification nodes
+- Tool calls with expandable I/O
+- Error states with detailed context
+- Timestamps for each operation
+
+#### 📝 Dashboard Tabs
+- **Message**: Full email thread UI
+- **Trace**: Agent execution flow with timing data
+- **Logs**: Complete tool I/O and JSON state
+
+All metrics use **real data** from tool executions - no mocks!
 
 ## Environment Variables
 
