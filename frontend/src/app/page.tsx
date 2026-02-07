@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import { ConversationList } from "@/components/conversation-list";
 import { ConversationDetail } from "@/components/conversation-detail";
 import { PlaygroundSidebar } from "@/components/playground-sidebar";
+import { MASBehaviorSidebar } from "@/components/mas-behavior-sidebar";
 import { fetchThreads, ThreadSummary } from "@/lib/api";
-import { Gamepad2 } from "lucide-react";
+import { Gamepad2, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Home() {
@@ -13,6 +14,7 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showPlayground, setShowPlayground] = useState(false);
+  const [showMASBehavior, setShowMASBehavior] = useState(false);
 
   const loadThreads = async () => {
     try {
@@ -96,6 +98,17 @@ export default function Home() {
                 Playground
               </span>
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowMASBehavior(true)}
+              className="h-9 px-3 shrink-0 border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 dark:from-amber-950/20 dark:to-orange-950/20 dark:hover:from-amber-950/30 dark:hover:to-orange-950/30 dark:border-amber-800 transition-all shadow-sm hover:shadow-md"
+              title="MAS Behavior"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-amber-600 dark:text-amber-400 mr-1.5" />
+              <span className="text-xs font-medium bg-gradient-to-r from-amber-600 to-orange-600 dark:from-amber-400 dark:to-orange-400 bg-clip-text text-transparent">
+                Behavior
+              </span>
+            </Button>
           </div>
         </div>
 
@@ -141,6 +154,9 @@ export default function Home() {
           }}
         />
       )}
+
+      {/* MAS Behavior Sidebar */}
+      {showMASBehavior && <MASBehaviorSidebar onClose={() => setShowMASBehavior(false)} />}
     </div>
   );
 }

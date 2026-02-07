@@ -2,8 +2,10 @@ prompt_policies:
 - If a customer wants to update their order address, do not update it directly. Mark
   the order as NEEDS_ATTENTION and escalate.
 agent_prompt_policies:
-  order_mod:
-  - Never promise a specific delivery date.
+  order_mod: []
+  feedback:
+  - If a customer provides positive feedback, thank them and do not offer any extra
+    benefits like discounts.
 behavior_overrides:
   order_mod:
   - trigger: address_update

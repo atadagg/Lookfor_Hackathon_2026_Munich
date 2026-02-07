@@ -13,19 +13,35 @@ import re
 from typing import Any, Dict, Optional
 
 from core.llm import get_async_openai_client
-from core.mas_behavior import add_behavior_override, add_prompt_policy, get_full_config
+from core.mas_behavior import (
+    add_behavior_override,
+    add_prompt_policy,
+    get_full_config,
+    remove_agent_prompt_policy_at,
+    remove_behavior_override,
+    remove_prompt_policy_at,
+)
 
 
-INTERPRETER_SYSTEM_PROMPT = """You are an interpreter for a multi-agent customer support system (MAS). You receive a natural-language instruction that describes how the system should behave, and you must output a single JSON object that will be used to update the MAS configuration.
+INTERPRETER_SYSTEM_PROMPT = """You are an interpreter for a multi-agent customer support system (MAS). You receive a natural-language instruction that describes how the system should behave (add or remove rules), and you must output a single JSON object that will be used to update the MAS configuration.
 
 Available agents (use exactly these names): order_mod, wismo, wrong_item, product_issue, refund, feedback, discount, subscription.
 
-Output JSON with exactly these keys (use null when not applicable):
-- "instruction": string or null. The policy text to append to agent system prompts. Use this when the NL describes a rule agents should follow (tone, what to do/avoid). If the instruction applies to one agent only, set "agent". If it applies to all agents, set "agent" to null.
-- "agent": string or null. If "instruction" is set, this is the target agent for that policy (or null for global / all agents).
-- "behavior_override": object or null. Use this when the NL describes a specific rule like "when X happens, do Y instead of the default". Must have: "agent", "trigger", "action", "tag". "trigger" is snake_case (e.g. address_update, refund_request, cancel_order). "action" is usually "escalate". "tag" is the order/ticket tag (e.g. NEEDS_ATTENTION). Only use for agents that support overrides (e.g. order_mod has trigger "address_update").
+Output JSON with these keys (use null when not applicable):
 
-You may set both "instruction" and "behavior_override" when the NL implies both a policy to show in prompts and a code-level override (e.g. "don't update address directly, mark NEEDS_ATTENTION and escalate" -> instruction text + behavior_override for order_mod, trigger address_update, action escalate, tag NEEDS_ATTENTION).
+ADD (for adding new behavior):
+- "instruction": string or null. The policy text to append to agent system prompts. If the instruction applies to one agent only, set "agent". If it applies to all agents, set "agent" to null.
+- "agent": string or null. If "instruction" is set, this is the target agent for that policy (or null for global).
+- "behavior_override": object or null. Use when the NL describes a specific rule like "when X happens, do Y instead". Must have: "agent", "trigger", "action", "tag". "trigger" is snake_case (e.g. address_update, refund_request). Only use for agents that support overrides (e.g. order_mod has trigger "address_update").
+
+REMOVE (for deleting existing behavior):
+- "remove": object or null. Use when the user wants to DELETE/REMOVE/UNDO a rule. Set to an object with:
+  - "type": "prompt_policy" | "agent_policy" | "behavior_override"
+  - For "prompt_policy": include "index": number (0-based index of the global policy to remove). If user says "remove the first policy" use 0, "second" use 1, etc.
+  - For "agent_policy": include "agent": string, "index": number (0-based index for that agent).
+  - For "behavior_override": include "agent": string, "trigger": string (e.g. "address_update"). This removes the override with that trigger for that agent.
+
+Examples of REMOVE: "remove the address update override" -> remove: { type: "behavior_override", agent: "order_mod", trigger: "address_update" }. "remove the first global policy" -> remove: { type: "prompt_policy", index: 0 }.
 
 Output only valid JSON, no markdown or explanation."""
 
@@ -66,7 +82,30 @@ async def interpret_nl_to_mas_update(prompt: str) -> Dict[str, Any]:
     if not isinstance(data, dict):
         return {"config": get_full_config(), "applied": {}, "error": "LLM output was not a JSON object"}
 
-    applied = {"instruction": False, "behavior_override": False}
+    applied = {"instruction": False, "behavior_override": False, "removed": False}
+    # Remove (process first so "remove then add" is clear)
+    remove_spec = data.get("remove")
+    if isinstance(remove_spec, dict) and remove_spec.get("type"):
+        rtype = remove_spec.get("type")
+        if rtype == "prompt_policy" and isinstance(remove_spec.get("index"), int):
+            if remove_prompt_policy_at(remove_spec["index"]):
+                applied["removed"] = True
+                applied["removed_type"] = "prompt_policy"
+                applied["removed_index"] = remove_spec["index"]
+        elif rtype == "agent_policy" and isinstance(remove_spec.get("agent"), str) and isinstance(remove_spec.get("index"), int):
+            if remove_agent_prompt_policy_at(remove_spec["agent"], remove_spec["index"]):
+                applied["removed"] = True
+                applied["removed_type"] = "agent_policy"
+                applied["removed_agent"] = remove_spec["agent"]
+                applied["removed_index"] = remove_spec["index"]
+        elif rtype == "behavior_override" and isinstance(remove_spec.get("agent"), str) and isinstance(remove_spec.get("trigger"), str):
+            if remove_behavior_override(remove_spec["agent"], remove_spec["trigger"]):
+                applied["removed"] = True
+                applied["removed_type"] = "behavior_override"
+                applied["removed_agent"] = remove_spec["agent"]
+                applied["removed_trigger"] = remove_spec["trigger"]
+
+    # Add
     instruction = data.get("instruction")
     if instruction and isinstance(instruction, str):
         agent = data.get("agent")

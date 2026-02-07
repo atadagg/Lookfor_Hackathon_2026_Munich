@@ -127,3 +127,69 @@ export async function sendMessage(payload: SendMessagePayload) {
   if (!res.ok) throw new Error("Failed to send message");
   return res.json();
 }
+
+// ─── MAS Behavior (dynamic agent policies / interpreter) ───────────────────
+
+export interface MASConfig {
+  prompt_policies?: string[];
+  agent_prompt_policies?: Record<string, string[]>;
+  behavior_overrides?: Record<string, Array<{ trigger: string; action: string; tag?: string }>>;
+}
+
+export async function fetchMASBehavior(): Promise<MASConfig> {
+  const res = await fetch(`${API_URL}/mas/behavior`);
+  if (!res.ok) throw new Error("Failed to fetch MAS behavior");
+  return res.json();
+}
+
+export interface MASUpdatePayload {
+  instruction?: string;
+  agent?: string;
+  behavior_override?: { agent: string; trigger: string; action: string; tag?: string };
+  /** Remove global prompt policy at 0-based index */
+  remove_prompt_policy_index?: number;
+  /** Remove per-agent policy at index */
+  remove_agent_policy?: { agent: string; index: number };
+  /** Remove behavior override by agent + index or agent + trigger */
+  remove_behavior_override?: { agent: string; index?: number; trigger?: string };
+}
+
+export async function updateMASBehavior(payload: MASUpdatePayload): Promise<MASConfig> {
+  const res = await fetch(`${API_URL}/mas/update`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to update MAS behavior");
+  return res.json();
+}
+
+export interface MASInterpretPayload {
+  prompt: string;
+}
+
+export interface MASInterpretResult {
+  config: MASConfig;
+  applied: {
+    instruction?: boolean;
+    agent?: string;
+    behavior_override?: boolean;
+    behavior_override_rule?: Record<string, unknown>;
+    removed?: boolean;
+    removed_type?: "prompt_policy" | "agent_policy" | "behavior_override";
+    removed_agent?: string;
+    removed_trigger?: string;
+    removed_index?: number;
+  };
+  error: string | null;
+}
+
+export async function interpretMASBehavior(payload: MASInterpretPayload): Promise<MASInterpretResult> {
+  const res = await fetch(`${API_URL}/mas/interpret`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Failed to interpret MAS behavior");
+  return res.json();
+}

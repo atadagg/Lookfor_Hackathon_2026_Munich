@@ -118,6 +118,62 @@ def add_behavior_override(agent: str, rule: Dict[str, Any]) -> None:
     _save_raw(data)
 
 
+def remove_prompt_policy_at(index: int) -> bool:
+    """Remove the global prompt policy at the given index (0-based). Returns True if removed."""
+    data = _load_raw()
+    policies = data.get("prompt_policies")
+    if not isinstance(policies, list) or index < 0 or index >= len(policies):
+        return False
+    data["prompt_policies"] = [p for i, p in enumerate(policies) if i != index]
+    _save_raw(data)
+    return True
+
+
+def remove_agent_prompt_policy_at(agent: str, index: int) -> bool:
+    """Remove the policy at index for the given agent. Returns True if removed."""
+    data = _load_raw()
+    per_agent = data.get("agent_prompt_policies")
+    if not isinstance(per_agent, dict):
+        return False
+    policies = per_agent.get(agent)
+    if not isinstance(policies, list) or index < 0 or index >= len(policies):
+        return False
+    data["agent_prompt_policies"][agent] = [p for i, p in enumerate(policies) if i != index]
+    _save_raw(data)
+    return True
+
+
+def remove_behavior_override(agent: str, trigger: str) -> bool:
+    """Remove the first override rule for this agent with the given trigger. Returns True if removed."""
+    data = _load_raw()
+    overrides = data.get("behavior_overrides")
+    if not isinstance(overrides, dict):
+        return False
+    rules = overrides.get(agent)
+    if not isinstance(rules, list):
+        return False
+    new_rules = [r for r in rules if not (isinstance(r, dict) and r.get("trigger") == trigger)]
+    if len(new_rules) == len(rules):
+        return False
+    data["behavior_overrides"][agent] = new_rules
+    _save_raw(data)
+    return True
+
+
+def remove_behavior_override_at(agent: str, index: int) -> bool:
+    """Remove the override rule at index for the given agent. Returns True if removed."""
+    data = _load_raw()
+    overrides = data.get("behavior_overrides")
+    if not isinstance(overrides, dict):
+        return False
+    rules = overrides.get(agent)
+    if not isinstance(rules, list) or index < 0 or index >= len(rules):
+        return False
+    data["behavior_overrides"][agent] = [r for i, r in enumerate(rules) if i != index]
+    _save_raw(data)
+    return True
+
+
 def get_full_config() -> Dict[str, Any]:
     """Return the full parsed config (for GET /mas/behavior)."""
     return _load_raw()

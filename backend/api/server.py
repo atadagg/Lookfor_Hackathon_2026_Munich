@@ -18,6 +18,10 @@ from core.mas_behavior import (
     add_behavior_override,
     add_prompt_policy,
     get_full_config,
+    remove_agent_prompt_policy_at,
+    remove_behavior_override,
+    remove_behavior_override_at,
+    remove_prompt_policy_at,
 )
 from core.mas_interpret import interpret_nl_to_mas_update
 from core.storage import get_attachment_stream, upload_attachment
@@ -81,9 +85,10 @@ async def get_mas_behavior():
 
 @app.post("/mas/update")
 async def post_mas_update(req: Dict[str, Any] = Body(default_factory=dict)):
-    """Update MAS behavior: append a prompt policy and/or a structured override. Body: {"instruction": "...", "agent": "order_mod"} (agent optional: global if omitted) and/or {"behavior_override": {...}}."""
+    """Update MAS behavior: add or remove. Add: instruction, agent, behavior_override. Remove: remove_prompt_policy_index (int), remove_agent_policy {agent, index}, remove_behavior_override {agent, index? or trigger?}."""
     if not isinstance(req, dict):
         return get_full_config()
+    # Add
     instruction = req.get("instruction")
     if instruction and isinstance(instruction, str):
         agent = req.get("agent")
@@ -91,6 +96,19 @@ async def post_mas_update(req: Dict[str, Any] = Body(default_factory=dict)):
     bo = req.get("behavior_override")
     if isinstance(bo, dict) and bo.get("agent"):
         add_behavior_override(bo["agent"], bo)
+    # Remove
+    idx = req.get("remove_prompt_policy_index")
+    if isinstance(idx, int) and idx >= 0:
+        remove_prompt_policy_at(idx)
+    rap = req.get("remove_agent_policy")
+    if isinstance(rap, dict) and isinstance(rap.get("agent"), str) and isinstance(rap.get("index"), int):
+        remove_agent_prompt_policy_at(rap["agent"], rap["index"])
+    rbo = req.get("remove_behavior_override")
+    if isinstance(rbo, dict) and rbo.get("agent"):
+        if isinstance(rbo.get("trigger"), str):
+            remove_behavior_override(rbo["agent"], rbo["trigger"])
+        elif isinstance(rbo.get("index"), int) and rbo["index"] >= 0:
+            remove_behavior_override_at(rbo["agent"], rbo["index"])
     return get_full_config()
 
 
