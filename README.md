@@ -1,4 +1,4 @@
-# Lookfor Hackathon 2026 - Team Fidelio
+# Lookfor Hackathon 2026 - Team Munich
 
 AI-powered multi-agent customer support system for e-commerce brands.
 
