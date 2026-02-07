@@ -300,7 +300,7 @@ async def shopify_get_customer_orders(
 ) -> dict:
     payload = {"email": email, "after": after, "limit": limit}
     if API_URL:
-        resp = await post_tool("hackathon/get_customer_orders", payload)
+        resp = await post_tool("hackhaton/get_customer_orders", payload)
         return resp.model_dump()
     # Mock
     return {
