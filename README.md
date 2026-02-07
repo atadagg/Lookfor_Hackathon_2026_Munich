@@ -2,6 +2,34 @@
 
 AI-powered multi-agent customer support system for e-commerce brands.
 
+## 🎬 Hackathon Showcase Mode
+
+**NEW!** We've built a dedicated presentation mode with **23 pre-curated examples** across all **8 use cases**:
+
+```
+🎯 Hackathon Showcase
+├─ 📦 UC1: WISMO (3 examples)
+├─ ❌ UC2: Wrong Item (3 examples, incl. photo)
+├─ 🔧 UC3: Product Issue (2 examples)
+├─ 💰 UC4: Refund (2 examples)
+├─ ✏️ UC5: Order Modification (2 examples)
+├─ 💬 UC6: Feedback (2 examples)
+├─ 🔄 UC7: Subscription (3 examples)
+└─ 🎟️ UC8: Discount (2 examples)
+```
+
+**Features:**
+- ✨ One-click demo scenarios organized by use case
+- 📝 Real customer messages with expected outcomes
+- 🎯 Difficulty levels (easy/medium/hard)
+- 📸 Photo upload examples
+- 📊 Full trace observability
+- 🏆 Perfect for live judging!
+
+**Quick Demo:** Click the big "Hackathon Showcase" button → Expand any use case → Click "Run Example" → Watch the agent work!
+
+See [SHOWCASE_FEATURE.md](SHOWCASE_FEATURE.md) for complete documentation.
+
 ## Quick Start
 
 ```bash
