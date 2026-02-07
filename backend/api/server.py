@@ -104,7 +104,9 @@ async def chat(req: ChatRequest) -> ChatResponse:
     """
 
     # 1) Process attachments: upload to MinIO (or local fallback) and collect refs
+    # Also build data URLs for the AI (OpenAI vision API accepts data:image/...;base64,...)
     attachments_meta: List[Dict[str, Any]] = []
+    photo_urls_for_ai: List[str] = []
     if req.attachments:
         for att in req.attachments:
             try:
@@ -119,6 +121,9 @@ async def chat(req: ChatRequest) -> ChatResponse:
             )
             if meta:
                 attachments_meta.append(meta)
+                # Data URLs work with OpenAI vision API (no public URL needed)
+                if (att.content_type or "").startswith("image/"):
+                    photo_urls_for_ai.append(f"data:{att.content_type};base64,{att.data}")
     attachments_json_str = json.dumps(attachments_meta) if attachments_meta else None
 
     # 2) Log inbound user message (with duplicate detection).
@@ -184,9 +189,10 @@ async def chat(req: ChatRequest) -> ChatResponse:
         messages=messages,
     )
     
-    # Add photo URLs if provided (UC2: Wrong Item)
-    if req.photo_urls:
-        state["photo_urls"] = req.photo_urls
+    # Add photo URLs for the AI (UC2: Wrong Item) - from photo_urls and/or attachments
+    all_photo_urls: List[str] = list(req.photo_urls or []) + photo_urls_for_ai
+    if all_photo_urls:
+        state["photo_urls"] = all_photo_urls
 
     # 1. Route to the right specialist
     state = await route(state)

@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from langgraph.graph import END, StateGraph
 
@@ -245,6 +245,48 @@ async def _classify_intent(latest_message: str) -> Dict[str, Any]:
     return out
 
 
+async def _validate_photos(photo_urls: List[str]) -> Tuple[bool, Optional[str]]:
+    """Use vision API to check if photos show valid product/order content.
+    Returns (is_valid, rejection_reason). rejection_reason is set when invalid.
+    """
+    if not photo_urls:
+        return True, None
+    try:
+        client = get_async_openai_client()
+        content: List[dict] = [
+            {
+                "type": "text",
+                "text": (
+                    "Does this image show a VALID photo for a wrong/missing item support ticket? "
+                    "Valid = actual product items, parcel/box contents, packing slip, shipping label, "
+                    "or anything a customer would send to prove what they received.\n"
+                    "INVALID = memes, jokes, cartoons, screenshots of text only, unrelated images, "
+                    "obvious pranks, or anything that is NOT a real photo of a product/parcel.\n"
+                    "Reply with ONLY a JSON object: {\"valid\": true} or {\"valid\": false, \"reason\": \"brief explanation\"}"
+                ),
+            },
+        ]
+        for url in photo_urls[:3]:  # limit to first 3 to save tokens
+            content.append({"type": "image_url", "image_url": {"url": url, "detail": "low"}})
+        resp = await client.chat.completions.create(
+            model="gpt-4o",
+            temperature=0,
+            max_tokens=128,
+            messages=[{"role": "user", "content": content}],
+        )
+        text = (resp.choices[0].message.content or "").strip()
+        start = text.find("{")
+        end = text.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return True, None  # On parse failure, assume valid to avoid blocking
+        obj = json.loads(text[start : end + 1])
+        if obj.get("valid") is True:
+            return True, None
+        return False, obj.get("reason") or "Image does not appear to show product/parcel content."
+    except Exception:
+        return True, None  # On error, assume valid to avoid blocking real customers
+
+
 async def node_decide_step(state: AgentState) -> dict:
     """Classify user intent; escalate reship, execute credit/refund, or ask / offer resolution."""
 
@@ -254,9 +296,26 @@ async def node_decide_step(state: AgentState) -> dict:
 
     latest = _latest_user_text(state)
     
-    # Track if photos were provided
+    # Validate and track photos
     photo_urls = state.get("photo_urls", [])
     if photo_urls:
+        is_valid, reject_reason = await _validate_photos(photo_urls)
+        if not is_valid:
+            internal["photos_received"] = False
+            internal["photos_invalid"] = True
+            new_msg = Message(
+                role="assistant",
+                content=(
+                    "I'm sorry, I can't recognize the image—it doesn't seem to show "
+                    "a photo of the product or parcel. Could you please send a clear "
+                    "photo of what you received (the items, packing slip, or shipping label)?"
+                ),
+            )
+            return {
+                "internal_data": internal,
+                "messages": list(state.get("messages", [])) + [new_msg],
+                "workflow_step": "awaiting_valid_photo",
+            }
         internal["photos_received"] = True
         internal["photo_urls"] = photo_urls
     
@@ -418,37 +477,16 @@ async def node_generate_response(state: AgentState) -> dict:
     try:
         client = get_async_openai_client()
         
-        # Build message content with photos if available
-        photo_urls = internal.get("photo_urls", [])
-        if photo_urls:
-            # Use vision capabilities - include images in the prompt
-            content_parts = [{"type": "text", "text": user_prompt}]
-            for photo_url in photo_urls:
-                content_parts.append({
-                    "type": "image_url",
-                    "image_url": {"url": photo_url, "detail": "low"}
-                })
-            
-            resp = await client.chat.completions.create(
-                model="gpt-4o-mini",  # Supports vision
-                temperature=0.3,
-                max_tokens=256,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": content_parts},
-                ],
-            )
-        else:
-            # No photos - standard text-only prompt
-            resp = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                temperature=0.3,
-                max_tokens=256,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-            )
+        # Text-only prompt (we store photos for display but don't analyze them)
+        resp = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0.3,
+            max_tokens=256,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
         
         assistant_text = (resp.choices[0].message.content or "").strip()
         if not assistant_text:
