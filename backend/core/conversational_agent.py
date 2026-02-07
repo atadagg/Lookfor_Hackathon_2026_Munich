@@ -104,7 +104,7 @@ class ConversationalAgent(BaseAgent):
         # ---- build OpenAI messages ---------------------------------
         # Inject customer context into the system prompt
         customer_ctx = self._build_customer_context(customer, state)
-        full_system = inject_policies_into_prompt(self._system_prompt)
+        full_system = inject_policies_into_prompt(self._system_prompt, agent=self.name)
         if customer_ctx:
             full_system += "\n\nCUSTOMER CONTEXT:\n" + customer_ctx
 

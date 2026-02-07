@@ -354,7 +354,7 @@ async def node_generate_response(state: AgentState) -> dict:
     ]
     latest_user = user_msgs[-1] if user_msgs else ""
 
-    system_prompt = inject_policies_into_prompt(wismo_system_prompt())
+    system_prompt = inject_policies_into_prompt(wismo_system_prompt(), agent="wismo")
     user_prompt = (
         "CONTEXT (from tools and workflow rules):\n"
         + context

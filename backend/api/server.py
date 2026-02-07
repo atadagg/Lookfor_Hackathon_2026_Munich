@@ -76,12 +76,13 @@ async def get_mas_behavior():
 
 @app.post("/mas/update")
 async def post_mas_update(req: Dict[str, Any] = Body(default_factory=dict)):
-    """Update MAS behavior: append a prompt policy and/or a structured override. Body: {"instruction": "..."} and/or {"behavior_override": {"agent": "...", "trigger": "...", "action": "...", "tag": "..."}}."""
+    """Update MAS behavior: append a prompt policy and/or a structured override. Body: {"instruction": "...", "agent": "order_mod"} (agent optional: global if omitted) and/or {"behavior_override": {...}}."""
     if not isinstance(req, dict):
         return get_full_config()
     instruction = req.get("instruction")
     if instruction and isinstance(instruction, str):
-        add_prompt_policy(instruction.strip())
+        agent = req.get("agent")
+        add_prompt_policy(instruction.strip(), agent=agent if isinstance(agent, str) else None)
     bo = req.get("behavior_override")
     if isinstance(bo, dict) and bo.get("agent"):
         add_behavior_override(bo["agent"], bo)

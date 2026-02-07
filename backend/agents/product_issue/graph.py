@@ -205,7 +205,7 @@ async def node_ask_goal(state: AgentState) -> dict:
     ]
     context = "\n".join(p for p in context_parts if p)
 
-    system_prompt = inject_policies_into_prompt(product_issue_ask_goal_prompt())
+    system_prompt = inject_policies_into_prompt(product_issue_ask_goal_prompt(), agent="product_issue")
     user_prompt = (
         "CONTEXT:\n"
         + context

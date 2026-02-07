@@ -85,7 +85,7 @@ async def node_generate_response(state: AgentState) -> dict:
     user_msgs = [m["content"] for m in state.get("messages", []) if m.get("role") == "user"]
     latest_user = user_msgs[-1] if user_msgs else ""
 
-    system_prompt = inject_policies_into_prompt(discount_system_prompt())
+    system_prompt = inject_policies_into_prompt(discount_system_prompt(), agent="discount")
     user_prompt = (
         "CONTEXT:\n"
         + context
