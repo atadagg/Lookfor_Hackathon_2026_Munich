@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { sendMessage } from "@/lib/api";
+import { API_URL, sendMessage } from "@/lib/api";
 
 interface RealTicket {
   conversationId: string;
@@ -185,12 +185,17 @@ function categorizeTicket(ticket: RealTicket): CategorizedTicket {
   };
 }
 
-function extractFirstMessage(conversation: string): string {
-  const customerMatch = conversation.match(/Customer's message: "([^"]*)"/);
-  if (customerMatch) {
-    return customerMatch[1].substring(0, 200).trim() + (customerMatch[1].length > 200 ? "..." : "");
-  }
-  return conversation.substring(0, 200).trim() + (conversation.length > 200 ? "..." : "");
+/** Extract all customer messages from conversation (format: Customer's message: "..." Agent's message: "..." ...) */
+function extractAllCustomerMessages(conversation: string): string[] {
+  const matches = [...conversation.matchAll(/Customer's message: "([^"]*?)"/g)];
+  const messages = matches.map((m) => m[1].trim()).filter(Boolean);
+  return messages.length > 0 ? messages : [conversation.trim().slice(0, 2000) || "Hello"];
+}
+
+function extractFirstMessage(conversation: string, maxLen = 200): string {
+  const messages = extractAllCustomerMessages(conversation);
+  const first = messages[0] ?? conversation;
+  return first.length > maxLen ? first.slice(0, maxLen).trim() + "..." : first.trim();
 }
 
 export function ShowcaseSidebar({ onClose, onExampleSelected }: ShowcaseSidebarProps) {
@@ -199,6 +204,7 @@ export function ShowcaseSidebar({ onClose, onExampleSelected }: ShowcaseSidebarP
   const [selectedTicket, setSelectedTicket] = useState<CategorizedTicket | null>(null);
   const [expandedCategory, setExpandedCategory] = useState<string | null>("wismo");
   const [sending, setSending] = useState(false);
+  const [sendProgress, setSendProgress] = useState<{ current: number; total: number } | null>(null);
 
   useEffect(() => {
     loadTickets();
@@ -207,8 +213,20 @@ export function ShowcaseSidebar({ onClose, onExampleSelected }: ShowcaseSidebarP
   const loadTickets = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/showcase-tickets.json");
-      const rawTickets: RealTicket[] = await response.json();
+      let rawTickets: RealTicket[] = [];
+      try {
+        const response = await fetch(`${API_URL}/playground/tickets`);
+        if (response.ok) {
+          const data = await response.json();
+          rawTickets = data.tickets ?? (Array.isArray(data) ? data : []);
+        }
+      } catch {
+        /* backend unavailable */
+      }
+      if (rawTickets.length === 0) {
+        const fallback = await fetch("/api/showcase-tickets.json");
+        rawTickets = (await fallback.json()) ?? [];
+      }
       
       // Categorize and take max 3 per category for cleaner UI
       const categorized = rawTickets.map(categorizeTicket);
@@ -239,12 +257,13 @@ export function ShowcaseSidebar({ onClose, onExampleSelected }: ShowcaseSidebarP
   };
 
   const runExample = async (ticket: CategorizedTicket) => {
+    const customerMessages = extractAllCustomerMessages(ticket.conversation);
     setSending(true);
+    setSendProgress({ current: 0, total: customerMessages.length });
+
     try {
       const showcaseId = `showcase_${ticket.customerId}_${Date.now()}`;
-      const firstMessage = extractFirstMessage(ticket.conversation);
-
-      await sendMessage({
+      const basePayload = {
         conversation_id: showcaseId,
         user_id: ticket.customerId,
         channel: ticket.conversationType || "email",
@@ -252,8 +271,15 @@ export function ShowcaseSidebar({ onClose, onExampleSelected }: ShowcaseSidebarP
         first_name: "Showcase",
         last_name: "Customer",
         shopify_customer_id: ticket.customerId,
-        message: firstMessage,
-      });
+      };
+
+      for (let i = 0; i < customerMessages.length; i++) {
+        setSendProgress({ current: i + 1, total: customerMessages.length });
+        await sendMessage({
+          ...basePayload,
+          message: customerMessages[i],
+        });
+      }
 
       onExampleSelected(showcaseId);
       setTimeout(() => onClose(), 300);
@@ -262,6 +288,7 @@ export function ShowcaseSidebar({ onClose, onExampleSelected }: ShowcaseSidebarP
       alert("Failed to run example. Check console for details.");
     } finally {
       setSending(false);
+      setSendProgress(null);
     }
   };
 
@@ -391,7 +418,9 @@ export function ShowcaseSidebar({ onClose, onExampleSelected }: ShowcaseSidebarP
       </div>
 
       {/* Selected Ticket Detail */}
-      {selectedTicket && (
+      {selectedTicket && (() => {
+        const msgCount = extractAllCustomerMessages(selectedTicket.conversation).length;
+        return (
         <div className="border-t bg-muted/20 p-4 shrink-0">
           <div className="flex items-start justify-between gap-2 mb-3">
             <div className="flex-1 min-w-0">
@@ -407,14 +436,16 @@ export function ShowcaseSidebar({ onClose, onExampleSelected }: ShowcaseSidebarP
               className="shrink-0"
             >
               <Play className="w-3.5 h-3.5 mr-1.5" />
-              {sending ? "Running..." : "Run"}
+              {sending && sendProgress
+                ? `Sending ${sendProgress.current}/${sendProgress.total}`
+                : `Run${msgCount > 1 ? ` (${msgCount} msgs)` : ""}`}
             </Button>
           </div>
 
           {/* Message Preview */}
           <div className="bg-background border rounded-lg p-3 text-xs">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-              Customer Message
+              {msgCount > 1 ? `Customer Messages (${msgCount})` : "Customer Message"}
             </div>
             <p className="text-foreground leading-relaxed line-clamp-4">
               {extractFirstMessage(selectedTicket.conversation)}
@@ -429,7 +460,8 @@ export function ShowcaseSidebar({ onClose, onExampleSelected }: ShowcaseSidebarP
             </code>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
