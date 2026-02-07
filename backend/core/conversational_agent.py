@@ -21,6 +21,7 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from core.base_agent import BaseAgent
 from core.llm import get_async_openai_client
+from core.mas_behavior import inject_policies_into_prompt
 from core.state import AgentState, Message
 
 
@@ -103,7 +104,7 @@ class ConversationalAgent(BaseAgent):
         # ---- build OpenAI messages ---------------------------------
         # Inject customer context into the system prompt
         customer_ctx = self._build_customer_context(customer, state)
-        full_system = self._system_prompt
+        full_system = inject_policies_into_prompt(self._system_prompt, agent=self.name)
         if customer_ctx:
             full_system += "\n\nCUSTOMER CONTEXT:\n" + customer_ctx
 

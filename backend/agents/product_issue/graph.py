@@ -26,6 +26,7 @@ from langgraph.graph import END, StateGraph
 
 from core.base_agent import BaseAgent
 from core.llm import get_async_openai_client
+from core.mas_behavior import inject_policies_into_prompt
 from core.state import AgentState, Message
 from schemas.internal import EscalationSummary
 
@@ -204,7 +205,7 @@ async def node_ask_goal(state: AgentState) -> dict:
     ]
     context = "\n".join(p for p in context_parts if p)
 
-    system_prompt = product_issue_ask_goal_prompt()
+    system_prompt = inject_policies_into_prompt(product_issue_ask_goal_prompt(), agent="product_issue")
     user_prompt = (
         "CONTEXT:\n"
         + context

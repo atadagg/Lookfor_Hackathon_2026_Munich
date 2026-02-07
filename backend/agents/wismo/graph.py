@@ -30,6 +30,7 @@ from langgraph.graph import END, StateGraph
 
 from core.base_agent import BaseAgent
 from core.llm import get_async_openai_client
+from core.mas_behavior import inject_policies_into_prompt
 from core.state import AgentState, Message
 from schemas.internal import EscalationSummary
 from .prompts import wismo_system_prompt
@@ -353,7 +354,7 @@ async def node_generate_response(state: AgentState) -> dict:
     ]
     latest_user = user_msgs[-1] if user_msgs else ""
 
-    system_prompt = wismo_system_prompt()
+    system_prompt = inject_policies_into_prompt(wismo_system_prompt(), agent="wismo")
     user_prompt = (
         "CONTEXT (from tools and workflow rules):\n"
         + context

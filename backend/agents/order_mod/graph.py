@@ -23,6 +23,7 @@ from langgraph.graph import END, StateGraph
 
 from core.base_agent import BaseAgent
 from core.llm import get_async_openai_client
+from core.mas_behavior import get_behavior_overrides, inject_policies_into_prompt
 from core.state import AgentState, Message
 from schemas.internal import EscalationSummary
 from .prompts import order_mod_system_prompt
@@ -246,7 +247,37 @@ async def node_decide_action(state: AgentState) -> dict:
                 "workflow_step": "escalated_fulfilled",
             }
 
-        # Ask for new address
+        # Check behavior_overrides: e.g. "do not update address; escalate + tag NEEDS_ATTENTION"
+        overrides = get_behavior_overrides("order_mod")
+        for rule in overrides:
+            if rule.get("trigger") == "address_update" and rule.get("action") == "escalate":
+                tag = rule.get("tag") or "NEEDS_ATTENTION"
+                tag_resp = await add_order_tags(order_gid=order_gid, tags=[tag])
+                internal["tool_traces"].append({
+                    "name": "add_order_tags",
+                    "inputs": {"order_gid": order_gid, "tags": [tag]},
+                    "output": tag_resp.model_dump(),
+                })
+                internal["escalation_summary"] = EscalationSummary(
+                    reason="policy_override_address_update",
+                    details={"tag": tag},
+                ).model_dump()
+                new_msg = Message(
+                    role="assistant",
+                    content=(
+                        "I'm not able to update the address directly. I've marked this for attention "
+                        "and I'm looping in Monica, our Head of CS, who will take it from here."
+                    ),
+                )
+                return {
+                    "is_escalated": True,
+                    "escalated_at": datetime.now(timezone.utc),
+                    "internal_data": internal,
+                    "messages": list(state.get("messages", [])) + [new_msg],
+                    "workflow_step": "escalated_policy_override",
+                }
+
+        # Ask for new address (default when no override)
         new_msg = Message(
             role="assistant",
             content=(
@@ -296,7 +327,7 @@ async def node_generate_response(state: AgentState) -> dict:
     user_msgs = [m["content"] for m in state.get("messages", []) if m.get("role") == "user"]
     latest_user = user_msgs[-1] if user_msgs else ""
 
-    system_prompt = order_mod_system_prompt()
+    system_prompt = inject_policies_into_prompt(order_mod_system_prompt(), agent="order_mod")
     user_prompt = (
         "CONTEXT:\n"
         + context

@@ -1,0 +1,11 @@
+prompt_policies:
+- If a customer wants to update their order address, do not update it directly. Mark
+  the order as NEEDS_ATTENTION and escalate.
+agent_prompt_policies:
+  order_mod:
+  - Never promise a specific delivery date.
+behavior_overrides:
+  order_mod:
+  - trigger: address_update
+    action: escalate
+    tag: NEEDS_ATTENTION

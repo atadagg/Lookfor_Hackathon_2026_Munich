@@ -7,13 +7,19 @@ import json
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from core.state import AgentState, Message
 from core.database import Checkpointer
+from core.mas_behavior import (
+    add_behavior_override,
+    add_prompt_policy,
+    get_full_config,
+)
+from core.mas_interpret import interpret_nl_to_mas_update
 from core.storage import get_attachment_stream, upload_attachment
 from router.logic import route
 from main import get_agent_registry
@@ -49,10 +55,54 @@ def _get_agents():
     return _agent_registry
 
 
+class MASUpdateRequest(BaseModel):
+    """Update MAS behavior: add a prompt policy and/or a structured behavior override."""
+
+    instruction: Optional[str] = None
+    behavior_override: Optional[Dict[str, Any]] = None
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint for Docker healthcheck."""
     return {"status": "healthy", "service": "fidelio-backend"}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# MAS behavior config (single file: config/mas_behavior.yaml)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@app.get("/mas/behavior")
+async def get_mas_behavior():
+    """Return the current MAS behavior config (prompt_policies, behavior_overrides)."""
+    return get_full_config()
+
+
+@app.post("/mas/update")
+async def post_mas_update(req: Dict[str, Any] = Body(default_factory=dict)):
+    """Update MAS behavior: append a prompt policy and/or a structured override. Body: {"instruction": "...", "agent": "order_mod"} (agent optional: global if omitted) and/or {"behavior_override": {...}}."""
+    if not isinstance(req, dict):
+        return get_full_config()
+    instruction = req.get("instruction")
+    if instruction and isinstance(instruction, str):
+        agent = req.get("agent")
+        add_prompt_policy(instruction.strip(), agent=agent if isinstance(agent, str) else None)
+    bo = req.get("behavior_override")
+    if isinstance(bo, dict) and bo.get("agent"):
+        add_behavior_override(bo["agent"], bo)
+    return get_full_config()
+
+
+@app.post("/mas/interpret")
+async def post_mas_interpret(req: Dict[str, Any] = Body(default_factory=dict)):
+    """Interpret natural language into MAS updates and apply them. Body: {"prompt": "If a customer wants to update their order address, do not update it directly. Mark as NEEDS_ATTENTION and escalate."}. Returns config + applied summary + error if any."""
+    if not isinstance(req, dict):
+        return {"config": get_full_config(), "applied": {}, "error": "Body must be a JSON object"}
+    prompt = req.get("prompt")
+    if not prompt or not isinstance(prompt, str):
+        return {"config": get_full_config(), "applied": {}, "error": "Missing or invalid 'prompt' string"}
+    return await interpret_nl_to_mas_update(prompt)
 
 
 class AttachmentInput(BaseModel):
