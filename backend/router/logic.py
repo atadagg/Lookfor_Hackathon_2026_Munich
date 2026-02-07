@@ -152,7 +152,20 @@ async def route(state: AgentState) -> AgentState:
 
     This will typically be called from the server before handing off to a
     specialist agent graph.
+
+    On follow-up turns (when the conversation already has a ``routed_agent``
+    and an active ``workflow_step``), we keep the same agent to preserve
+    multi-turn continuity instead of reclassifying.
     """
+
+    prev_agent = state.get("routed_agent")
+
+    # If the conversation already has a routed agent from a previous turn,
+    # keep the same agent to preserve multi-turn continuity. This prevents
+    # follow-up messages like "yes, skip" from being reclassified into a
+    # different workflow.
+    if prev_agent:
+        return state
 
     decision = await classify_intent(state)
     state["intent"] = decision.intent

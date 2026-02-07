@@ -228,6 +228,174 @@ The frontend provides production-grade observability with real-time metrics:
 
 All metrics use **real data** from tool executions - no mocks!
 
+## Demo / Testing
+
+Test emails: `baki@lookfor.ai` and `ebrar@lookfor.ai`
+
+### 1. Start the system
+
+```bash
+docker compose up --build -d
+```
+
+### 2. Test each workflow (copy-paste curls)
+
+**WISMO (Shipping Delay):**
+```bash
+curl -s -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "demo-wismo",
+    "user_id": "baki",
+    "channel": "email",
+    "customer_email": "baki@lookfor.ai",
+    "first_name": "Baki",
+    "last_name": "Lookfor",
+    "shopify_customer_id": "cust_baki",
+    "message": "Where is my order? It has been days and still nothing arrived."
+  }' | python3 -m json.tool
+```
+
+**Subscription Cancel (multi-turn):**
+```bash
+# Turn 1: customer wants to cancel
+curl -s -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "demo-sub",
+    "user_id": "baki",
+    "channel": "email",
+    "customer_email": "baki@lookfor.ai",
+    "first_name": "Baki",
+    "last_name": "Lookfor",
+    "shopify_customer_id": "cust_baki",
+    "message": "I have too many stickers at home. I want to cancel my subscription."
+  }' | python3 -m json.tool
+
+# Turn 2: customer agrees to skip (stays with subscription agent)
+curl -s -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "demo-sub",
+    "user_id": "baki",
+    "channel": "email",
+    "customer_email": "baki@lookfor.ai",
+    "first_name": "Baki",
+    "last_name": "Lookfor",
+    "shopify_customer_id": "cust_baki",
+    "message": "Yes please, lets skip the next order."
+  }' | python3 -m json.tool
+```
+
+**Wrong Item:**
+```bash
+curl -s -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "demo-wrong",
+    "user_id": "ebrar",
+    "channel": "email",
+    "customer_email": "ebrar@lookfor.ai",
+    "first_name": "Ebrar",
+    "last_name": "Lookfor",
+    "shopify_customer_id": "cust_ebrar",
+    "message": "I received the wrong item in my package. I ordered BuzzPatch but got FocusPatch instead."
+  }' | python3 -m json.tool
+```
+
+**Discount Code:**
+```bash
+curl -s -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "demo-discount",
+    "user_id": "baki",
+    "channel": "email",
+    "customer_email": "baki@lookfor.ai",
+    "first_name": "Baki",
+    "last_name": "Lookfor",
+    "shopify_customer_id": "cust_baki",
+    "message": "My discount code WELCOME10 says invalid at checkout."
+  }' | python3 -m json.tool
+```
+
+**Positive Feedback:**
+```bash
+curl -s -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "demo-feedback",
+    "user_id": "ebrar",
+    "channel": "email",
+    "customer_email": "ebrar@lookfor.ai",
+    "first_name": "Ebrar",
+    "last_name": "Lookfor",
+    "shopify_customer_id": "cust_ebrar",
+    "message": "BuzzPatch saved our camping trip! No bites at all, the kids loved it!"
+  }' | python3 -m json.tool
+```
+
+**Refund Request:**
+```bash
+curl -s -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "demo-refund",
+    "user_id": "ebrar",
+    "channel": "email",
+    "customer_email": "ebrar@lookfor.ai",
+    "first_name": "Ebrar",
+    "last_name": "Lookfor",
+    "shopify_customer_id": "cust_ebrar",
+    "message": "I want a refund for my order. The stickers did not work as promised."
+  }' | python3 -m json.tool
+```
+
+**Product Issue (No Effect):**
+```bash
+curl -s -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "demo-product",
+    "user_id": "baki",
+    "channel": "email",
+    "customer_email": "baki@lookfor.ai",
+    "first_name": "Baki",
+    "last_name": "Lookfor",
+    "shopify_customer_id": "cust_baki",
+    "message": "The focus patches are not helping my son concentrate at all."
+  }' | python3 -m json.tool
+```
+
+**Order Cancellation:**
+```bash
+curl -s -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "demo-cancel",
+    "user_id": "baki",
+    "channel": "email",
+    "customer_email": "baki@lookfor.ai",
+    "first_name": "Baki",
+    "last_name": "Lookfor",
+    "shopify_customer_id": "cust_baki",
+    "message": "I accidentally ordered twice, can you please cancel one?"
+  }' | python3 -m json.tool
+```
+
+### 3. What to look for in the response
+
+Every response includes full observability:
+- `state.last_assistant_message` — the reply sent to the customer
+- `state.agent_turn_history[].tool_traces` — every tool called with inputs/outputs
+- `state.is_escalated` / `state.escalation_summary` — escalation status
+- `state.intent` / `state.routed_agent` — how the message was classified
+- `state.workflow_step` — where the agent is in its workflow
+
+### 4. Frontend Dashboard
+
+Open http://localhost:3000 for the visual dashboard with the email-style UI, execution traces, and performance metrics.
+
 ## Environment Variables
 
 | Variable | Required | Description |
