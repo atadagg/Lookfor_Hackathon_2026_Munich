@@ -30,8 +30,8 @@ Available agents (use exactly these names): order_mod, wismo, wrong_item, produc
 Output JSON with these keys (use null when not applicable):
 
 ADD (for adding new behavior):
-- "instruction": string or null. The policy text to append to agent system prompts. If the instruction applies to one agent only, set "agent". If it applies to all agents, set "agent" to null.
-- "agent": string or null. If "instruction" is set, this is the target agent for that policy (or null for global).
+- "instruction": string or null. The policy text to append to agent system prompts.
+- "agent": string or null. Use null for a GLOBAL policy (applies to all agents). Only set to an agent name when the user explicitly says the rule is for one agent only (e.g. "for the refund agent only"). When in doubt, use null so the policy applies globally.
 - "behavior_override": object or null. Use when the NL describes a specific rule like "when X happens, do Y instead". Must have: "agent", "trigger", "action", "tag". "trigger" is snake_case (e.g. address_update, refund_request). Only use for agents that support overrides (e.g. order_mod has trigger "address_update").
 
 REMOVE (for deleting existing behavior):
@@ -41,6 +41,7 @@ REMOVE (for deleting existing behavior):
   - For "agent_policy": include "agent": string, "index": number (0-based index for that agent).
   - For "behavior_override": include "agent": string, "trigger": string (e.g. "address_update"). This removes the override with that trigger for that agent.
 
+Examples of ADD (global = agent null): "Always escalate address changes" -> { "instruction": "Always escalate address changes.", "agent": null }. "For the refund agent only, never offer store credit" -> { "instruction": "Never offer store credit.", "agent": "refund" }.
 Examples of REMOVE: "remove the address update override" -> remove: { type: "behavior_override", agent: "order_mod", trigger: "address_update" }. "remove the first global policy" -> remove: { type: "prompt_policy", index: 0 }.
 
 Output only valid JSON, no markdown or explanation."""

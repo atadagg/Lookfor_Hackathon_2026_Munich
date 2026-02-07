@@ -18,20 +18,49 @@ except ImportError:
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "mas_behavior.yaml"
 
 
+def _default_config() -> Dict[str, Any]:
+    """Return the default config structure (used when file is missing or invalid)."""
+    return {"prompt_policies": [], "agent_prompt_policies": {}, "behavior_overrides": {}}
+
+
 def _load_raw() -> Dict[str, Any]:
-    """Load and parse the YAML file. Returns empty dict if missing or invalid."""
+    """Load and parse the YAML file. Returns normalized dict with correct types."""
+    default = _default_config()
     if not yaml:
-        return {}
+        return default
     if not _CONFIG_PATH.exists():
-        return {"prompt_policies": [], "agent_prompt_policies": {}, "behavior_overrides": {}}
+        return default
     try:
         with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
         if not isinstance(data, dict):
-            return {"prompt_policies": [], "agent_prompt_policies": {}, "behavior_overrides": {}}
-        return data
+            return default
+        # Normalize so prompt_policies is always a list, etc.
+        prompt_policies = data.get("prompt_policies")
+        if not isinstance(prompt_policies, list):
+            prompt_policies = []
+        else:
+            # Preserve all items (only strip/coerce) so we never drop existing policies when saving
+            prompt_policies = [str(p).strip() for p in prompt_policies]
+        agent_prompt_policies = data.get("agent_prompt_policies")
+        if not isinstance(agent_prompt_policies, dict):
+            agent_prompt_policies = {}
+        else:
+            agent_prompt_policies = {
+                k: [str(p).strip() for p in v] if isinstance(v, list) else []
+                for k, v in agent_prompt_policies.items()
+                if isinstance(k, str)
+            }
+        behavior_overrides = data.get("behavior_overrides")
+        if not isinstance(behavior_overrides, dict):
+            behavior_overrides = {}
+        return {
+            "prompt_policies": prompt_policies,
+            "agent_prompt_policies": agent_prompt_policies,
+            "behavior_overrides": behavior_overrides,
+        }
     except Exception:
-        return {"prompt_policies": [], "agent_prompt_policies": {}, "behavior_overrides": {}}
+        return default
 
 
 def _save_raw(data: Dict[str, Any]) -> None:
@@ -96,10 +125,14 @@ def add_prompt_policy(instruction: str, agent: Optional[str] = None) -> None:
             data["agent_prompt_policies"][agent] = []
         data["agent_prompt_policies"][agent].append(instruction.strip())
     else:
-        data.setdefault("prompt_policies", [])
-        if not isinstance(data["prompt_policies"], list):
-            data["prompt_policies"] = []
-        data["prompt_policies"].append(instruction.strip())
+        # Global: work with a copy of the list so we never replace or drop existing policies
+        existing = data.get("prompt_policies")
+        if not isinstance(existing, list):
+            existing = []
+        else:
+            existing = list(existing)  # copy
+        existing.append(instruction.strip())
+        data["prompt_policies"] = existing
     _save_raw(data)
 
 

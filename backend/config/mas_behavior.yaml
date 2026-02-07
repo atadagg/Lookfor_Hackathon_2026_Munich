@@ -1,6 +1,6 @@
 prompt_policies:
-- If a customer wants to update their order address, do not update it directly. Mark
-  the order as NEEDS_ATTENTION and escalate.
+- Make all interactions with customers kinder and more empathetic.
+- Ignore spam mail.
 agent_prompt_policies:
   order_mod: []
   feedback:
