@@ -20,6 +20,9 @@ python-dotenv
 # You can add other LLM SDKs here during the hackathon, e.g.:
 # anthropic
 
+# MAS behavior config (YAML)
+PyYAML
+
 # Testing
 pytest
 pytest-asyncio

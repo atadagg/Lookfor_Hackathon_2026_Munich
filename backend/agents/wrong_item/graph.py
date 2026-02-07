@@ -25,6 +25,7 @@ from langgraph.graph import END, StateGraph
 
 from core.base_agent import BaseAgent
 from core.llm import get_async_openai_client
+from core.mas_behavior import inject_policies_into_prompt
 from core.state import AgentState, Message
 from schemas.internal import EscalationSummary
 from .prompts import wrong_item_classify_prompt, wrong_item_system_prompt
@@ -464,7 +465,7 @@ async def node_generate_response(state: AgentState) -> dict:
     user_msgs = [m["content"] for m in state.get("messages", []) if m.get("role") == "user"]
     latest_user = user_msgs[-1] if user_msgs else ""
 
-    system_prompt = wrong_item_system_prompt()
+    system_prompt = inject_policies_into_prompt(wrong_item_system_prompt())
     user_prompt = (
         "CONTEXT (from workflow):\n"
         + context

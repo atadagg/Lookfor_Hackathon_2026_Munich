@@ -58,6 +58,27 @@ PHOTO_B64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEh
 curl -X POST "$BACKEND_URL/chat" -H "Content-Type: application/json" -d "{\"conversation_id\":\"photo-test-1\",\"user_id\":\"u1\",\"channel\":\"email\",\"customer_email\":\"test@example.com\",\"first_name\":\"T\",\"last_name\":\"U\",\"shopify_customer_id\":\"c1\",\"message\":\"See attached photo\",\"attachments\":[{\"filename\":\"img.png\",\"content_type\":\"image/png\",\"data\":\"$PHOTO_B64\"}]}" | jq
 ```
 
+**Large images (avoid "argument list too long"):** Put the payload in a file so the base64 data is not on the command line:
+
+```bash
+PHOTO_B64=$(base64 -i backend/tests/images.jpeg | tr -d '\n')
+jq -n \
+  --arg b64 "$PHOTO_B64" \
+  '{ conversation_id: "photo-demo-3", user_id: "demo", channel: "email", customer_email: "demo@example.com", first_name: "Demo", last_name: "User", shopify_customer_id: "demo-1", message: "I received the wrong item. Here is a photo of what I got.", attachments: [{ filename: "images.jpeg", content_type: "image/jpeg", data: $b64 }] }' \
+  > /tmp/chat-payload.json
+curl -X POST "http://localhost:8000/chat" -H "Content-Type: application/json" -d @/tmp/chat-payload.json | jq
+```
+
+Or pipe JSON into curl (no temp file):
+
+```bash
+PHOTO_B64=$(base64 -i backend/tests/images.jpeg | tr -d '\n')
+jq -n \
+  --arg b64 "$PHOTO_B64" \
+  '{ conversation_id: "photo-demo-3", user_id: "demo", channel: "email", customer_email: "demo@example.com", first_name: "Demo", last_name: "User", shopify_customer_id: "demo-1", message: "I received the wrong item. Here is a photo of what I got.", attachments: [{ filename: "images.jpeg", content_type: "image/jpeg", data: $b64 }] }' \
+  | curl -X POST "http://localhost:8000/chat" -H "Content-Type: application/json" -d @- | jq
+```
+
 Images are stored in MinIO (when credentials are set) or locally in `data/uploads/`. Fetch thread to see attachments; frontend displays them inline.
 
 ---

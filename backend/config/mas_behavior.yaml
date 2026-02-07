@@ -1,0 +1,12 @@
+prompt_policies:
+- If a customer wants to update their order address, do not update it directly. Mark
+  the order as NEEDS_ATTENTION and escalate.
+behavior_overrides:
+  order_mod:
+  - trigger: address_update
+    action: escalate
+    tag: NEEDS_ATTENTION
+  - agent: order_mod
+    trigger: address_update
+    action: escalate
+    tag: NEEDS_ATTENTION
