@@ -5,8 +5,7 @@ Each tool has:
   - An OpenAI function-calling schema (SCHEMA_*)
   - An entry in the EXECUTORS dict
 
-Endpoints use the exact paths from the spec: {API_URL}/hackhaton/...
-(note: "hackhaton" is the spec spelling)
+Endpoints: {API_URL}/hackathon/...
 """
 
 from __future__ import annotations
@@ -36,7 +35,7 @@ def _random_gid(resource: str = "Order") -> str:
 
 async def shopify_add_tags(*, id: str, tags: list) -> dict:
     if API_URL:
-        resp = await post_tool("hackhaton/add_tags", {"id": id, "tags": tags})
+        resp = await post_tool("hackathon/add_tags", {"id": id, "tags": tags})
         return resp.model_dump()
     return {"success": True, "data": {}, "error": None}
 
@@ -88,7 +87,7 @@ async def shopify_cancel_order(
         "storeCredit": storeCredit or {"expiresAt": None},
     }
     if API_URL:
-        resp = await post_tool("hackhaton/cancel_order", payload)
+        resp = await post_tool("hackathon/cancel_order", payload)
         return resp.model_dump()
     return {"success": True, "data": {}, "error": None}
 
@@ -145,7 +144,7 @@ async def shopify_create_discount_code(
         "productIds": productIds or [],
     }
     if API_URL:
-        resp = await post_tool("hackhaton/create_discount_code", payload)
+        resp = await post_tool("hackathon/create_discount_code", payload)
         return resp.model_dump()
     code = "DISCOUNT_LF_%s" % "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
     return {"success": True, "data": {"code": code}, "error": None}
@@ -181,7 +180,7 @@ SCHEMA_CREATE_DISCOUNT_CODE = {
 
 async def shopify_create_return(*, orderId: str) -> dict:
     if API_URL:
-        resp = await post_tool("hackhaton/create_return", {"orderId": orderId})
+        resp = await post_tool("hackathon/create_return", {"orderId": orderId})
         return resp.model_dump()
     return {"success": True, "data": {}, "error": None}
 
@@ -212,7 +211,7 @@ async def shopify_create_store_credit(
 ) -> dict:
     payload = {"id": id, "creditAmount": creditAmount, "expiresAt": expiresAt}
     if API_URL:
-        resp = await post_tool("hackhaton/create_store_credit", payload)
+        resp = await post_tool("hackathon/create_store_credit", payload)
         return resp.model_dump()
     amount = creditAmount.get("amount", "10.00")
     currency = creditAmount.get("currencyCode", "USD")
@@ -260,7 +259,7 @@ SCHEMA_CREATE_STORE_CREDIT = {
 
 async def shopify_get_collection_recommendations(*, queryKeys: list) -> dict:
     if API_URL:
-        resp = await post_tool("hackhaton/get_collection_recommendations", {"queryKeys": queryKeys})
+        resp = await post_tool("hackathon/get_collection_recommendations", {"queryKeys": queryKeys})
         return resp.model_dump()
     return {
         "success": True,
@@ -301,7 +300,7 @@ async def shopify_get_customer_orders(
 ) -> dict:
     payload = {"email": email, "after": after, "limit": limit}
     if API_URL:
-        resp = await post_tool("hackhaton/get_customer_orders", payload)
+        resp = await post_tool("hackathon/get_customer_orders", payload)
         return resp.model_dump()
     # Mock
     return {
@@ -351,7 +350,7 @@ async def shopify_get_order_details(*, orderId: str) -> dict:
     if not orderId.startswith("#"):
         orderId = "#%s" % orderId.lstrip("#")
     if API_URL:
-        resp = await post_tool("hackhaton/get_order_details", {"orderId": orderId})
+        resp = await post_tool("hackathon/get_order_details", {"orderId": orderId})
         return resp.model_dump()
     # Mock
     return {
@@ -390,7 +389,7 @@ SCHEMA_GET_ORDER_DETAILS = {
 
 async def shopify_get_product_details(*, queryType: str, queryKey: str) -> dict:
     if API_URL:
-        resp = await post_tool("hackhaton/get_product_details", {
+        resp = await post_tool("hackathon/get_product_details", {
             "queryType": queryType, "queryKey": queryKey,
         })
         return resp.model_dump()
@@ -431,7 +430,7 @@ SCHEMA_GET_PRODUCT_DETAILS = {
 
 async def shopify_get_product_recommendations(*, queryKeys: list) -> dict:
     if API_URL:
-        resp = await post_tool("hackhaton/get_product_recommendations", {"queryKeys": queryKeys})
+        resp = await post_tool("hackathon/get_product_recommendations", {"queryKeys": queryKeys})
         return resp.model_dump()
     return {
         "success": True,
@@ -473,7 +472,7 @@ async def shopify_get_related_knowledge_source(
 ) -> dict:
     payload = {"question": question, "specificToProductId": specificToProductId}
     if API_URL:
-        resp = await post_tool("hackhaton/get_related_knowledge_source", payload)
+        resp = await post_tool("hackathon/get_related_knowledge_source", payload)
         return resp.model_dump()
     return {
         "success": True,
@@ -510,7 +509,7 @@ SCHEMA_GET_RELATED_KNOWLEDGE_SOURCE = {
 async def shopify_refund_order(*, orderId: str, refundMethod: str) -> dict:
     payload = {"orderId": orderId, "refundMethod": refundMethod}
     if API_URL:
-        resp = await post_tool("hackhaton/refund_order", payload)
+        resp = await post_tool("hackathon/refund_order", payload)
         return resp.model_dump()
     return {"success": True, "data": {}, "error": None}
 
@@ -546,7 +545,7 @@ async def shopify_update_order_shipping_address(
 ) -> dict:
     payload = {"orderId": orderId, "shippingAddress": shippingAddress}
     if API_URL:
-        resp = await post_tool("hackhaton/update_order_shipping_address", payload)
+        resp = await post_tool("hackathon/update_order_shipping_address", payload)
         return resp.model_dump()
     return {"success": True, "data": {}, "error": None}
 

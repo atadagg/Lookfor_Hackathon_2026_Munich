@@ -23,6 +23,7 @@ def wrong_item_system_prompt() -> str:
         RULES:
         - Be concise: 2-3 sentences maximum.
         - Be apologetic and use the customer's first name when provided.
+        - If the context says **photos received**: acknowledge the customer for sharing photos ("Thanks for the photo(s)!").
         - If the context says we're **asking what happened**: ask whether it's a missing item or wrong item received, and ask for a photo of what they received (and packing slip / label if possible).
         - If the context says we're **asking for photos**: ask for a photo of the items received and, if possible, the packing slip and shipping label.
         - If the context says we're **offering resolution**: offer in this order only — (1) free reship first, (2) then store credit (item value + 10% bonus), (3) then cash refund. If they already asked for a refund, explain that resending is usually faster.

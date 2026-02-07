@@ -15,7 +15,8 @@ from textwrap import dedent
 from core.conversational_agent import ConversationalAgent
 from tools.skio import (
     EXECUTORS as SKIO_EXEC,
-    SCHEMA_GET_SUBSCRIPTION_STATUS,
+    SCHEMA_GET_SUBSCRIPTIONS,
+    SCHEMA_GET_SUBSCRIPTION_STATUS,  # Legacy alias
     SCHEMA_SKIP_NEXT_ORDER,
     SCHEMA_PAUSE_SUBSCRIPTION,
     SCHEMA_CANCEL_SUBSCRIPTION,
@@ -36,7 +37,8 @@ class SubscriptionAgent(ConversationalAgent):
         self._workflow_name = "subscription"
         self._tool_schemas = [
             SCHEMA_GET_CUSTOMER_ORDERS,
-            SCHEMA_GET_SUBSCRIPTION_STATUS,
+            SCHEMA_GET_SUBSCRIPTIONS,  # New: returns array of subscriptions
+            SCHEMA_GET_SUBSCRIPTION_STATUS,  # Legacy: for backwards compatibility
             SCHEMA_SKIP_NEXT_ORDER,
             SCHEMA_PAUSE_SUBSCRIPTION,
             SCHEMA_CANCEL_SUBSCRIPTION,
@@ -57,7 +59,7 @@ class SubscriptionAgent(ConversationalAgent):
 
             You are handling a **Subscription / Billing Issue**. Follow STRICTLY:
 
-            STEP 1 – Check subscription status with skio_get_subscription_status (email).
+            STEP 1 – Check subscription status with skio_get_subscriptions (email). Returns array of all customer subscriptions.
             STEP 2 – Ask the reason.
 
             ROUTE A – "Too many on hand":

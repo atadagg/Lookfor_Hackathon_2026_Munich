@@ -1,6 +1,6 @@
 """Skio subscription tool adapters — all 5 tools from the hackathon spec.
 
-Endpoints: {API_URL}/hackhaton/...  (note: "hackhaton" is the spec spelling)
+Endpoints: {API_URL}/hackathon/...
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ async def skio_cancel_subscription(
 ) -> dict:
     payload = {"subscriptionId": subscriptionId, "cancellationReasons": cancellationReasons}
     if API_URL:
-        resp = await post_tool("hackhaton/cancel-subscription", payload)
+        resp = await post_tool("hackathon/cancel-subscription", payload)
         return resp.model_dump()
     return {"success": True, "data": {}, "error": None}
 
@@ -53,41 +53,60 @@ SCHEMA_CANCEL_SUBSCRIPTION = {
 
 
 # =====================================================================
-# 15) skio_get_subscription_status
+# 15) skio_get_subscriptions
 # =====================================================================
 
-async def skio_get_subscription_status(*, email: str) -> dict:
+async def skio_get_subscriptions(*, email: str) -> dict:
+    """Get all subscriptions for a customer by email. Returns array of subscriptions."""
     if API_URL:
-        resp = await post_tool("hackhaton/get-subscription-status", {"email": email})
+        resp = await post_tool("hackathon/get-subscriptions", {"email": email})
         return resp.model_dump()
-    # Mock
+    # Mock - returns array of subscriptions
     next_billing = (datetime.now(timezone.utc) + timedelta(days=14)).strftime("%Y-%m-%d")
     return {
         "success": True,
-        "data": {
-            "status": "ACTIVE",
-            "subscriptionId": "sub_mock_123",
-            "nextBillingDate": next_billing,
-        },
+        "data": [
+            {
+                "status": "ACTIVE",
+                "subscriptionId": "sub_mock_123",
+                "nextBillingDate": next_billing,
+            }
+        ],
         "error": None,
     }
 
 
-SCHEMA_GET_SUBSCRIPTION_STATUS = {
+SCHEMA_GET_SUBSCRIPTIONS = {
     "type": "function",
     "function": {
-        "name": "skio_get_subscription_status",
-        "description": "Get the subscription status of a customer by email.",
+        "name": "skio_get_subscriptions",
+        "description": "Get all subscriptions of a customer by email. Returns array of subscriptions with status, ID, and next billing date.",
         "parameters": {
             "type": "object",
             "required": ["email"],
             "properties": {
-                "email": {"type": "string", "description": "Customer email."},
+                "email": {"type": "string", "description": "Email of the user whose subscription information is retrieved."},
             },
             "additionalProperties": False,
         },
     },
 }
+
+# Legacy alias for backwards compatibility
+async def skio_get_subscription_status(*, email: str) -> dict:
+    """Legacy function - calls skio_get_subscriptions and returns first subscription."""
+    result = await skio_get_subscriptions(email=email)
+    if result.get("success") and isinstance(result.get("data"), list) and len(result["data"]) > 0:
+        # Return first subscription in old format for backwards compatibility
+        first_sub = result["data"][0]
+        return {
+            "success": True,
+            "data": first_sub,
+            "error": None,
+        }
+    return result
+
+SCHEMA_GET_SUBSCRIPTION_STATUS = SCHEMA_GET_SUBSCRIPTIONS  # Use same schema
 
 
 # =====================================================================
@@ -99,7 +118,7 @@ async def skio_pause_subscription(
 ) -> dict:
     payload = {"subscriptionId": subscriptionId, "pausedUntil": pausedUntil}
     if API_URL:
-        resp = await post_tool("hackhaton/pause-subscription", payload)
+        resp = await post_tool("hackathon/pause-subscription", payload)
         return resp.model_dump()
     return {"success": True, "data": {}, "error": None}
 
@@ -128,7 +147,7 @@ SCHEMA_PAUSE_SUBSCRIPTION = {
 
 async def skio_skip_next_order_subscription(*, subscriptionId: str) -> dict:
     if API_URL:
-        resp = await post_tool("hackhaton/skip-next-order-subscription", {"subscriptionId": subscriptionId})
+        resp = await post_tool("hackathon/skip-next-order-subscription", {"subscriptionId": subscriptionId})
         return resp.model_dump()
     return {"success": True, "data": {}, "error": None}
 
@@ -156,7 +175,7 @@ SCHEMA_SKIP_NEXT_ORDER = {
 
 async def skio_unpause_subscription(*, subscriptionId: str) -> dict:
     if API_URL:
-        resp = await post_tool("hackhaton/unpause-subscription", {"subscriptionId": subscriptionId})
+        resp = await post_tool("hackathon/unpause-subscription", {"subscriptionId": subscriptionId})
         return resp.model_dump()
     return {"success": True, "data": {}, "error": None}
 
@@ -184,7 +203,8 @@ SCHEMA_UNPAUSE_SUBSCRIPTION = {
 
 EXECUTORS = {
     "skio_cancel_subscription": skio_cancel_subscription,
-    "skio_get_subscription_status": skio_get_subscription_status,
+    "skio_get_subscriptions": skio_get_subscriptions,
+    "skio_get_subscription_status": skio_get_subscription_status,  # Legacy alias
     "skio_pause_subscription": skio_pause_subscription,
     "skio_skip_next_order_subscription": skio_skip_next_order_subscription,
     "skio_unpause_subscription": skio_unpause_subscription,

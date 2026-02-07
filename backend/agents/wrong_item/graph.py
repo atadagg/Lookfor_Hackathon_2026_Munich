@@ -253,6 +253,13 @@ async def node_decide_step(state: AgentState) -> dict:
         return {"workflow_step": "already_escalated"}
 
     latest = _latest_user_text(state)
+    
+    # Track if photos were provided
+    photo_urls = state.get("photo_urls", [])
+    if photo_urls:
+        internal["photos_received"] = True
+        internal["photo_urls"] = photo_urls
+    
     # Run classification and persist
     if "issue_type" not in internal or internal.get("_classify_done") is not True:
         classified = await _classify_intent(latest)
@@ -332,10 +339,14 @@ async def node_decide_step(state: AgentState) -> dict:
 
     # No resolution choice yet: if we have issue_type, offer resolution; else ask what happened + photos
     if issue_type and issue_type != "unknown":
+        # Thank customer if they provided photos
+        photos_received = internal.get("photos_received", False)
+        photo_thank = " Thanks for sharing the photo—that helps a lot!" if photos_received else ""
+        
         new_msg = Message(
             role="assistant",
             content=(
-                "I'm sorry to hear that. We can fix this in a few ways: "
+                f"I'm sorry to hear that.{photo_thank} We can fix this in a few ways: "
                 "I can arrange a free resend of the correct item, or offer you store credit "
                 "(item value + 10% bonus), or process a refund to your original payment method. "
                 "Which do you prefer?"
@@ -384,6 +395,12 @@ async def node_generate_response(state: AgentState) -> dict:
     ]
     if action == "confirmed_store_credit":
         context_parts.append("Store credit amount: %s" % internal.get("store_credit_amount", ""))
+    
+    # Add photo context if provided
+    if internal.get("photos_received"):
+        photo_urls = internal.get("photo_urls", [])
+        context_parts.append(f"Photos received: {len(photo_urls)} photo(s) from customer")
+    
     context = "\n".join(p for p in context_parts if p)
     user_msgs = [m["content"] for m in state.get("messages", []) if m.get("role") == "user"]
     latest_user = user_msgs[-1] if user_msgs else ""
@@ -400,15 +417,39 @@ async def node_generate_response(state: AgentState) -> dict:
 
     try:
         client = get_async_openai_client()
-        resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            temperature=0.3,
-            max_tokens=256,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
+        
+        # Build message content with photos if available
+        photo_urls = internal.get("photo_urls", [])
+        if photo_urls:
+            # Use vision capabilities - include images in the prompt
+            content_parts = [{"type": "text", "text": user_prompt}]
+            for photo_url in photo_urls:
+                content_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": photo_url, "detail": "low"}
+                })
+            
+            resp = await client.chat.completions.create(
+                model="gpt-4o-mini",  # Supports vision
+                temperature=0.3,
+                max_tokens=256,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": content_parts},
+                ],
+            )
+        else:
+            # No photos - standard text-only prompt
+            resp = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0.3,
+                max_tokens=256,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+        
         assistant_text = (resp.choices[0].message.content or "").strip()
         if not assistant_text:
             raise ValueError("Empty LLM response")

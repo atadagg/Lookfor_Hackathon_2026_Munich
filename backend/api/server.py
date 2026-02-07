@@ -5,14 +5,16 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from core.state import AgentState, Message
 from core.database import Checkpointer
 from router.logic import route
 from main import get_agent_registry
+from utils.minio_client import upload_photo, download_photo
 
 
 app = FastAPI(title="Lookfor Hackathon Support API")
@@ -51,6 +53,8 @@ class ChatRequest(BaseModel):
     last_name: str
     shopify_customer_id: str
     message: str
+    # Photo attachments (MinIO URLs for UC2: Wrong Item)
+    photo_urls: Optional[List[str]] = None
 
 
 class ChatResponse(BaseModel):
@@ -147,6 +151,10 @@ async def chat(req: ChatRequest) -> ChatResponse:
         customer_info=customer_info,
         messages=messages,
     )
+    
+    # Add photo URLs if provided (UC2: Wrong Item)
+    if req.photo_urls:
+        state["photo_urls"] = req.photo_urls
 
     # 1. Route to the right specialist
     state = await route(state)
@@ -346,3 +354,79 @@ async def get_thread_state(conversation_id: str):
     if state is None:
         return {"error": "not_found"}
     return state
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Photo Upload/Download Endpoints (UC2: Wrong Item)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@app.post("/photos/upload")
+async def upload_customer_photo(file: UploadFile = File(...)):
+    """
+    Upload a customer photo to MinIO storage.
+    
+    Used by the frontend when customers attach photos to their support messages
+    (primarily for UC2: Wrong Item workflow).
+    
+    Returns:
+        {
+            "success": bool,
+            "url": str (public MinIO URL for the uploaded photo),
+            "filename": str,
+            "message": str (optional)
+        }
+    """
+    # Validate file type
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type: {file.content_type}. Only images are allowed.",
+        )
+    
+    # Read file content
+    content = await file.read()
+    
+    # Validate file size (max 10MB)
+    max_size = 10 * 1024 * 1024  # 10MB
+    if len(content) > max_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large: {len(content)} bytes. Maximum size is {max_size} bytes (10MB).",
+        )
+    
+    # Upload to MinIO
+    result = await upload_photo(content, file.filename or "photo.jpg")
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("error", "Upload failed"),
+        )
+    
+    return result
+
+
+@app.get("/photos/download")
+async def download_customer_photo(url: str):
+    """
+    Download a photo from MinIO storage.
+    
+    Args:
+        url: Full MinIO URL of the photo
+    
+    Returns:
+        Binary image content with appropriate content-type header
+    """
+    result = await download_photo(url)
+    
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=404,
+            detail=result.get("error", "Photo not found"),
+        )
+    
+    return Response(
+        content=result["content"],
+        media_type=result.get("content_type", "image/jpeg"),
+    )

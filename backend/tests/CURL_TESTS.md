@@ -1,10 +1,38 @@
 # CURL Test Commands - All Use Cases
 
-## Setup
+## 🎯 Testing with Real Hackathon API
+
+**IMPORTANT:** These tests will use the **REAL hackathon API** if `API_URL` is set in `backend/.env`
+
+### Setup Environment Variables
+
 ```bash
 # Backend URL (change for deployed version)
 export BACKEND_URL="http://localhost:8000"
+
+# MinIO URL for photo attachments (UC2: Wrong Item)
+export MINIO_URL="http://storage.aimentora.com/api/v1/download-shared-object/aHR0cDovLzEyNy4wLjAuMTo5MDAwL2dhbmdidWNrZXQvXzJkYzM5ZDQ5LTAwMDYtNDliZi05OThjLTMyNTA2Mzk4NGIwOS5qcGVnP1gtQW16LUFsZ29yaXRobT1BV1M0LUhNQUMtU0hBMjU2JlgtQW16LUNyZWRlbnRpYWw9Wk41RzRYNVVYSVdKWVMwREExUDklMkYyMDI2MDIwNiUyRnVzLWVhc3QtMSUyRnMzJTJGYXdzNF9yZXF1ZXN0JlgtQW16LURhdGU9MjAyNjAyMDZUMjIyNDUyWiZYLUFtei1FeHBpcmVzPTQzMTk5JlgtQW16LVNlY3VyaXR5LVRva2VuPWV5SmhiR2NpT2lKSVV6VXhNaUlzSW5SNWNDSTZJa3BYVkNKOS5leUpoWTJObGMzTkxaWGtpT2lKYVRqVkhORmcxVlZoSlYwcFpVekJFUVRGUU9TSXNJbVY0Y0NJNk1UYzNNRFExT1RnMU5Td2ljR0Z5Wlc1MElqb2liV2x1YVc5aFpHMXBiaUo5LkZHN0xNMlJoeWNYaG1nSGVRaTloVkpueXR4Wmphdkk1M2Q5UWJtZE1Md1R1MjlIMXZ6bjJPYnJXb0s5ajNEc21BYmx4Wi13YmZlZHRiM0RtaW9TSF93JlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCZ2ZXJzaW9uSWQ9bnVsbCZYLUFtei1TaWduYXR1cmU9NzM1OGZhYTRjOGRkYTljNzM1OWY5NDRiNWE4OTM2NWI3NGMwMTY0MzJjMDY2NzgyMjM5YThhZGQzNTJhNjJjMg"
 ```
+
+### Check API Configuration
+
+```bash
+# Check if real API is configured
+grep "^API_URL=" backend/.env
+
+# If empty or not set, backend will use MOCK mode
+# To use REAL API, set in backend/.env:
+# API_URL=https://lookfor-hackathon-backend.onrender.com
+```
+
+### Start Backend
+
+```bash
+cd backend
+uvicorn api.server:app --reload
+```
+
+**Note:** Backend reads `API_URL` from `.env` on startup. If set, all tool calls will use the **real hackathon API**.
 
 ---
 
@@ -157,7 +185,7 @@ curl -X POST "$BACKEND_URL/chat" \
     "message": "Received the pet collar but the tick stickers are missing."
   }' | jq
 
-# Turn 2: Provide details (if not escalated immediately)
+# Turn 2: Provide details with photo (MinIO URL from MINIO_URL env var)
 curl -X POST "$BACKEND_URL/chat" \
   -H "Content-Type: application/json" \
   -d '{
@@ -168,7 +196,8 @@ curl -X POST "$BACKEND_URL/chat" \
     "first_name": "Amy",
     "last_name": "Taylor",
     "shopify_customer_id": "cust-012",
-    "message": "Its a missing item. Here is a photo of what I received: [photo attached]"
+    "message": "Its a missing item. Here is a photo of what I received.",
+    "photo_urls": ["'"$MINIO_URL"'"]
   }' | jq
 
 # Turn 3: Choose store credit
@@ -215,6 +244,24 @@ curl -X POST "$BACKEND_URL/chat" \
     "last_name": "Moore",
     "shopify_customer_id": "cust-014",
     "message": "I ordered the emoji design stickers but got plain ones instead. Can you send the right ones?"
+  }' | jq
+```
+
+### Scenario 6: Wrong item with photo attached (immediate photo upload)
+```bash
+# Customer reports wrong item and provides photo in first message
+curl -X POST "$BACKEND_URL/chat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "wrong-item-6",
+    "user_id": "user-015",
+    "channel": "email",
+    "customer_email": "lisa@example.com",
+    "first_name": "David",
+    "last_name": "Anderson",
+    "shopify_customer_id": "cust-015",
+    "message": "I received the wrong item! I ordered Sleep patches but got Itch patches. Photo attached.",
+    "photo_urls": ["'"$MINIO_URL"'"]
   }' | jq
 ```
 
@@ -855,3 +902,124 @@ curl -sX POST "$BACKEND_URL/chat" -H "Content-Type: application/json" -d '{"conv
 - **Multi-turn conversations: 10+**
 - **Use cases covered: All 8**
 - **Edge cases: 2 complex scenarios**
+
+---
+
+## 🔍 Checking API Mode
+
+### Verify if Backend is Using Real API
+
+```bash
+# Check tool_traces in response to see if real API was called
+curl -X POST "$BACKEND_URL/chat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "api-check-001",
+    "user_id": "user-test",
+    "customer_email": "test@example.com",
+    "first_name": "Test",
+    "last_name": "User",
+    "shopify_customer_id": "cust-test",
+    "message": "I need a discount code"
+  }' | jq '.state.internal_data.tool_traces'
+
+# Real API: Will show actual data from hackathon API
+# Mock: Will show generic mock data
+```
+
+### Check Backend Configuration
+
+```bash
+# Check if API_URL is set
+grep "^API_URL=" backend/.env
+
+# Should show:
+# API_URL=https://lookfor-hackathon-backend.onrender.com  (Real API)
+# API_URL=                                                 (Mock mode)
+```
+
+---
+
+## 🧪 Quick API Health Check
+
+Test if tools can reach the hackathon API:
+
+```bash
+# This will trigger discount agent which calls create_discount_code tool
+curl -X POST "$BACKEND_URL/chat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "health-check-001",
+    "user_id": "test-user",
+    "customer_email": "test@example.com",
+    "first_name": "Health",
+    "last_name": "Check",
+    "shopify_customer_id": "cust-999",
+    "message": "Create a 10% discount code for me"
+  }' | jq '{
+    agent: .agent,
+    success: .state.internal_data.tool_traces[0].output.success,
+    tool: .state.internal_data.tool_traces[0].name,
+    error: .state.internal_data.tool_traces[0].output.error
+  }'
+
+# Expected with Real API:
+# - agent: "discount"
+# - success: true
+# - tool: "create_discount_10_percent"
+# - error: null
+```
+
+---
+
+## 💡 Tips for Testing with Real API
+
+1. **Set API_URL first** in `backend/.env`:
+   ```bash
+   API_URL=https://lookfor-hackathon-backend.onrender.com
+   ```
+
+2. **Restart backend** after changing `.env`
+
+3. **Start with one test** - Don't run all at once
+
+4. **Check tool_traces** - Use `| jq '.state.internal_data.tool_traces'` to see what tools were called
+
+5. **Look for errors** - Check `.state.internal_data.tool_traces[].output.error`
+
+6. **Use real customer data** - Replace test emails with real data from hackathon API
+
+---
+
+## 🎯 Example: Debugging Tool Calls
+
+```bash
+# Get detailed info about tool execution
+curl -X POST "$BACKEND_URL/chat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id": "debug-001",
+    "user_id": "debug-user",
+    "customer_email": "test@example.com",
+    "first_name": "Debug",
+    "last_name": "Test",
+    "shopify_customer_id": "cust-debug",
+    "message": "Where is my order?"
+  }' | jq '{
+    agent: .agent,
+    workflow: .state.current_workflow,
+    tools: [.state.internal_data.tool_traces[] | {
+      name: .name,
+      success: .output.success,
+      error: .output.error,
+      data_sample: (.output.data | if type == "object" then keys else type end)
+    }]
+  }'
+
+# This shows:
+# - Which agent handled it
+# - What workflow it triggered
+# - Which tools were called
+# - Whether they succeeded
+# - Any errors
+```
