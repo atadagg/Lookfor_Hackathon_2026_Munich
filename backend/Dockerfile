@@ -21,8 +21,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the project
 COPY . .
 
-# Create data directory for persistent storage
-RUN mkdir -p /app/data /app/data/uploads
+# Create directories for persistent storage
+RUN mkdir -p /app/data /app/data/uploads /app/db
+
+# Default DB path (volume-mounted)
+ENV DB_PATH=/app/db/state.db
 
 # Expose port
 EXPOSE 8000

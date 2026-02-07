@@ -15,6 +15,7 @@ the public `Checkpointer` interface.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -58,7 +59,9 @@ class Checkpointer:
         app = graph.compile(checkpointer=cp.langgraph_saver)
     """
 
-    def __init__(self, db_path: str = "state.db") -> None:
+    def __init__(self, db_path: str = None) -> None:
+        if db_path is None:
+            db_path = os.environ.get("DB_PATH", "state.db")
         self.db_path = db_path
         # `check_same_thread=False` so FastAPI / asyncio can share the connection.
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
