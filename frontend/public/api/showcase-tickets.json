@@ -36,24 +36,24 @@
     "customerId": "cust_b1f341ae",
     "createdAt": "18-Jul-2025",
     "conversationType": "email",
-    "subject": "Where is my order?",
-    "conversation": "Customer's message: \"Where is my order ? Order placed 2 weeks ago, no tracking update.\""
+    "subject": "Where is my order NP8073419?",
+    "conversation": "Customer's message: \"Where is my order NP8073419? Order placed 2 weeks ago, no tracking update. Please check status.\""
   },
   {
     "conversationId": "<8d4f2a1c3b9e@example.com>",
     "customerId": "cust_9c3d8a2b",
     "createdAt": "17-Jul-2025",
     "conversationType": "email",
-    "subject": "Request refund for defective product",
-    "conversation": "Customer's message: \"Hi, I received my order but the patches don't stick at all. I'd like a full refund please. Order NP8523147\""
+    "subject": "Request refund for order NP8523147",
+    "conversation": "Customer's message: \"Hi, I received my order NP8523147 but the patches don't stick at all. They're completely defective. I'd like a full refund please.\""
   },
   {
     "conversationId": "<5e7c9d2f8a1b@example.com>",
     "customerId": "cust_4e2a7c9d",
     "createdAt": "17-Jul-2025",
     "conversationType": "email",
-    "subject": "Cancel my order",
-    "conversation": "Customer's message: \"I need to cancel order NP9012345. It hasn't shipped yet. Please process the cancellation immediately.\""
+    "subject": "Cancel order NP9012345",
+    "conversation": "Customer's message: \"I need to cancel my order NP9012345. It hasn't shipped yet according to tracking. Please process the cancellation immediately and refund me.\""
   },
   {
     "conversationId": "<3f8b4e1d7c2a@example.com>",
@@ -84,8 +84,8 @@
     "customerId": "cust_2a4c8e6d",
     "createdAt": "15-Jul-2025",
     "conversationType": "email",
-    "subject": "Tracking shows delivered but not received",
-    "conversation": "Customer's message: \"The tracking says my order was delivered 3 days ago but I never received it. Order NP7845123. Can you investigate?\""
+    "subject": "Order NP7845123 - Tracking shows delivered but not received",
+    "conversation": "Customer's message: \"The tracking says my order NP7845123 was delivered 3 days ago but I never received it. I've checked everywhere. Can you investigate what happened?\""
   },
   {
     "conversationId": "<1e9d3f7c5a2b@example.com>",
@@ -100,8 +100,8 @@
     "customerId": "cust_4e8f2b1a",
     "createdAt": "14-Jul-2025",
     "conversationType": "email",
-    "subject": "Product doesn't work as advertised",
-    "conversation": "Customer's message: \"The mosquito patches don't work at all. I've been bitten multiple times while wearing them. Very disappointed.\""
+    "subject": "Product doesn't work - Order NP9541287",
+    "conversation": "Customer's message: \"The mosquito patches from order NP9541287 don't work at all. I've been bitten multiple times while wearing them. Very disappointed with the quality.\""
   },
   {
     "conversationId": "<5a7c3e9d2f1b@example.com>",
@@ -116,8 +116,8 @@
     "customerId": "cust_6f2d8e1c",
     "createdAt": "13-Jul-2025",
     "conversationType": "email",
-    "subject": "Missing item from package",
-    "conversation": "Customer's message: \"My package arrived but it's missing 2 items. I only got the stickers but not the patches. Order NP9363178\""
+    "subject": "Missing items - Order NP9363178",
+    "conversation": "Customer's message: \"My package for order NP9363178 arrived but it's missing 2 items. I only got the stickers but not the patches I ordered. Can you resend the missing items?\""
   },
   {
     "conversationId": "<9e3a7d2f5c1b@example.com>",
@@ -156,7 +156,7 @@
     "customerId": "cust_7a3e5d9f",
     "createdAt": "10-Jul-2025",
     "conversationType": "email",
-    "subject": "Wrong color received",
-    "conversation": "Customer's message: \"I ordered blue patches but received pink ones. Can you send the correct color? Order NP7891234\""
+    "subject": "Wrong color received - Order NP7891234",
+    "conversation": "Customer's message: \"I ordered blue patches in order NP7891234 but received pink ones instead. Can you send me the correct color? I really need the blue ones.\""
   }
 ]
