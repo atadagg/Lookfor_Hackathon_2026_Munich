@@ -19,6 +19,7 @@ from core.mas_behavior import (
     add_prompt_policy,
     get_full_config,
 )
+from core.mas_interpret import interpret_nl_to_mas_update
 from core.storage import get_attachment_stream, upload_attachment
 from router.logic import route
 from main import get_agent_registry
@@ -87,6 +88,17 @@ async def post_mas_update(req: Dict[str, Any] = Body(default_factory=dict)):
     if isinstance(bo, dict) and bo.get("agent"):
         add_behavior_override(bo["agent"], bo)
     return get_full_config()
+
+
+@app.post("/mas/interpret")
+async def post_mas_interpret(req: Dict[str, Any] = Body(default_factory=dict)):
+    """Interpret natural language into MAS updates and apply them. Body: {"prompt": "If a customer wants to update their order address, do not update it directly. Mark as NEEDS_ATTENTION and escalate."}. Returns config + applied summary + error if any."""
+    if not isinstance(req, dict):
+        return {"config": get_full_config(), "applied": {}, "error": "Body must be a JSON object"}
+    prompt = req.get("prompt")
+    if not prompt or not isinstance(prompt, str):
+        return {"config": get_full_config(), "applied": {}, "error": "Missing or invalid 'prompt' string"}
+    return await interpret_nl_to_mas_update(prompt)
 
 
 class AttachmentInput(BaseModel):
