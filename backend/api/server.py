@@ -45,6 +45,12 @@ def _get_agents():
     return _agent_registry
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Docker healthcheck."""
+    return {"status": "healthy", "service": "fidelio-backend"}
+
+
 class AttachmentInput(BaseModel):
     """Base64-encoded image attachment from email/webhook."""
 
