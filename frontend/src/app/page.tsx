@@ -3,27 +3,38 @@
 import { useEffect, useState, useCallback } from "react";
 import { ConversationList } from "@/components/conversation-list";
 import { ConversationDetail } from "@/components/conversation-detail";
+import { PlaygroundSidebar } from "@/components/playground-sidebar";
 import { fetchThreads, ThreadSummary } from "@/lib/api";
+import { Gamepad2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function Home() {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [showPlayground, setShowPlayground] = useState(false);
 
-  const loadThreads = useCallback(async () => {
+  const loadThreads = async () => {
     try {
       const data = await fetchThreads();
       setThreads(data);
     } catch {
       // silently retry later
     }
-  }, []);
+  };
 
   useEffect(() => {
+    // Initial load
     loadThreads();
-    const interval = setInterval(loadThreads, 5000);
+    
+    // Set up polling interval
+    const interval = setInterval(() => {
+      loadThreads();
+    }, 5000);
+    
     return () => clearInterval(interval);
-  }, [loadThreads]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - we want this to run once on mount
 
   const filtered = threads.filter((t) => {
     if (!search) return true;
@@ -50,28 +61,41 @@ export default function Home() {
               {threads.length} thread{threads.length !== 1 ? "s" : ""}
             </span>
           </div>
-          {/* Search */}
-          <div className="relative">
-            <svg
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          {/* Search & Playground */}
+          <div className="flex gap-2 items-center">
+            <div className="relative flex-1">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search conversations..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full h-9 rounded-md border bg-muted/50 pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring focus:bg-background transition-all placeholder:text-muted-foreground/60"
               />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-md border bg-muted/50 pl-8 pr-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring focus:bg-background transition-colors placeholder:text-muted-foreground/60"
-            />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => setShowPlayground(true)}
+              className="h-9 px-3 shrink-0 border-purple-200 bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 dark:from-purple-950/20 dark:to-blue-950/20 dark:hover:from-purple-950/30 dark:hover:to-blue-950/30 dark:border-purple-800 transition-all shadow-sm hover:shadow-md"
+              title="Open Agent Playground"
+            >
+              <Gamepad2 className="w-4 h-4 text-purple-600 dark:text-purple-400 mr-1.5" />
+              <span className="text-xs font-medium bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent">
+                Playground
+              </span>
+            </Button>
           </div>
         </div>
 
@@ -104,6 +128,19 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Playground Sidebar */}
+      {showPlayground && (
+        <PlaygroundSidebar
+          onClose={() => setShowPlayground(false)}
+          onTicketSent={(conversationId) => {
+            // Auto-select the new conversation
+            setSelectedId(conversationId);
+            // Reload threads to show the new one
+            loadThreads();
+          }}
+        />
+      )}
     </div>
   );
 }

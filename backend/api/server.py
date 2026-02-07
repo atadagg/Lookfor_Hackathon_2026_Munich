@@ -18,9 +18,13 @@ from core.storage import get_attachment_stream, upload_attachment
 from router.logic import route
 from main import get_agent_registry
 from utils.minio_client import upload_photo, download_photo
+from api.playground import router as playground_router
 
 
 app = FastAPI(title="Lookfor Hackathon Support API")
+
+# Include playground routes
+app.include_router(playground_router)
 
 app.add_middleware(
     CORSMiddleware,

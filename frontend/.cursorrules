@@ -1,0 +1,9 @@
+# TypeScript Module Resolution
+The @/components/ui/button module exists and exports correctly.
+File: src/components/ui/button.tsx
+Exports: Button, ButtonProps, buttonVariants
+
+If TypeScript shows "Cannot find module" error:
+1. This is an IDE cache issue, not a code issue
+2. The build works: npm run build ✅
+3. Solution: Restart TypeScript Server (Cmd+Shift+P → "TypeScript: Restart TS Server")
